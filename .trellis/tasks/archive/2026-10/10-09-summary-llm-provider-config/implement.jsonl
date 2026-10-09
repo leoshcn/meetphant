@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/api-shape.md", "reason": "IPC contract for settings/summary commands being renamed"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "settings table column migration pattern"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "SUMMARY_PROVIDER_ERROR mapping and message rules"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "never log API keys or prompts"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "SettingsCredentials form changes"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "IPC types sync"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Rust<->TS contract rename"}

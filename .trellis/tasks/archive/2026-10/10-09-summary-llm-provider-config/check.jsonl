@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/api-shape.md", "reason": "verify contract docs match implementation"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "backend quality gates"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "verify no secret leakage"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "frontend quality gates"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "verify Rust/TS field names aligned"}
