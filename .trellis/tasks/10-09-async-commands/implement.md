@@ -42,4 +42,4 @@ npm run typecheck && npm test
 - 第 10 步排查：所有网络调用点（`generate_summary_http`、`test_*`、转写线程）都不在持锁作用域内
 - 新增测试 `db_lock_released_during_generation`、`meeting_deleted_during_generation_writes_nothing`
 - 本地验证：fmt ✓、clippy ✓、cargo test 92/92 ✓、typecheck ✓、vitest 50/50 ✓
-- 手动验证 PENDING（需要 Windows 和真实凭证）：摘要生成期间切换会议、打开设置页；长录音停止时窗口能否拖动；TOS 探测失败等待期间窗口不出现"未响应"
+- 手动验证 DONE（用户确认，2026-10-09）：摘要生成期间切换会议、打开设置页；长录音停止时窗口能否拖动；TOS 探测失败等待期间窗口不出现"未响应"
