@@ -5,10 +5,10 @@
 
 use crate::error::{AppErrorDto, CmdResult};
 
+/// Doubao speech new-console API Key (sent as `X-Api-Key`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DoubaoCredentials {
-    pub app_id: String,
-    pub access_token: String,
+    pub api_key: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,21 +28,20 @@ mod doubao_store {
     use std::cell::RefCell;
 
     thread_local! {
-        static MEMORY: RefCell<Option<(String, String)>> = const { RefCell::new(None) };
+        static MEMORY: RefCell<Option<String>> = const { RefCell::new(None) };
     }
 
     pub fn get() -> CmdResult<Option<DoubaoCredentials>> {
         Ok(MEMORY.with(|cell| {
-            cell.borrow().as_ref().map(|(app_id, token)| DoubaoCredentials {
-                app_id: app_id.clone(),
-                access_token: token.clone(),
+            cell.borrow().as_ref().map(|api_key| DoubaoCredentials {
+                api_key: api_key.clone(),
             })
         }))
     }
 
-    pub fn set(app_id: &str, access_token: &str) -> CmdResult<()> {
+    pub fn set(api_key: &str) -> CmdResult<()> {
         MEMORY.with(|cell| {
-            *cell.borrow_mut() = Some((app_id.to_string(), access_token.to_string()));
+            *cell.borrow_mut() = Some(api_key.to_string());
         });
         Ok(())
     }
@@ -64,50 +63,33 @@ mod doubao_store {
     use super::*;
     use keyring::Entry;
 
-    const SERVICE: &str = "meetly";
-    const ACCOUNT_APP_ID: &str = "doubao_app_id";
-    const ACCOUNT_ACCESS_TOKEN: &str = "doubao_access_token";
+    const SERVICE: &str = "meetphant";
+    const LEGACY_SERVICE: &str = "meetly";
+    const ACCOUNT_API_KEY: &str = "doubao_api_key";
+    /// Old-console App Id / Access Token accounts; no longer supported.
+    const LEGACY_ACCOUNTS: [&str; 2] = ["doubao_app_id", "doubao_access_token"];
 
-    fn entry(account: &str) -> CmdResult<Entry> {
-        Entry::new(SERVICE, account)
+    fn entry() -> CmdResult<Entry> {
+        Entry::new(SERVICE, ACCOUNT_API_KEY)
             .map_err(|_| AppErrorDto::internal("Failed to open credential store"))
     }
 
-    fn read_secret(account: &str) -> CmdResult<Option<String>> {
-        match entry(account)?.get_password() {
-            Ok(value) if !value.is_empty() => Ok(Some(value)),
+    pub fn get() -> CmdResult<Option<DoubaoCredentials>> {
+        match entry()?.get_password() {
+            Ok(value) if !value.is_empty() => Ok(Some(DoubaoCredentials { api_key: value })),
             Ok(_) => Ok(None),
             Err(keyring::Error::NoEntry) => Ok(None),
             Err(_) => Err(AppErrorDto::internal("Failed to read credentials")),
         }
     }
 
-    pub fn get() -> CmdResult<Option<DoubaoCredentials>> {
-        let app_id = read_secret(ACCOUNT_APP_ID)?;
-        let access_token = read_secret(ACCOUNT_ACCESS_TOKEN)?;
-        match (app_id, access_token) {
-            (Some(app_id), Some(access_token)) => Ok(Some(DoubaoCredentials {
-                app_id,
-                access_token,
-            })),
-            _ => Ok(None),
-        }
-    }
-
-    pub fn set(app_id: &str, access_token: &str) -> CmdResult<()> {
+    pub fn set(api_key: &str) -> CmdResult<()> {
         // Do not forward keyring Display into IPC (may include paths).
-        entry(ACCOUNT_APP_ID)?
-            .set_password(app_id)
-            .map_err(|_| AppErrorDto::internal("Failed to store Doubao app id"))?;
-        entry(ACCOUNT_ACCESS_TOKEN)?
-            .set_password(access_token)
-            .map_err(|_| AppErrorDto::internal("Failed to store Doubao access token"))?;
+        entry()?
+            .set_password(api_key)
+            .map_err(|_| AppErrorDto::internal("Failed to store Doubao API key"))?;
         match get()? {
-            Some(stored)
-                if stored.app_id == app_id && stored.access_token == access_token =>
-            {
-                Ok(())
-            }
+            Some(stored) if stored.api_key == api_key => Ok(()),
             Some(_) | None => Err(AppErrorDto::internal(
                 "Credential store write did not persist; check OS keyring access",
             )),
@@ -115,16 +97,22 @@ mod doubao_store {
     }
 
     pub fn clear() -> CmdResult<()> {
-        for account in [ACCOUNT_APP_ID, ACCOUNT_ACCESS_TOKEN] {
-            match entry(account)?.delete_credential() {
-                Ok(()) => {}
-                Err(keyring::Error::NoEntry) => {}
-                Err(_) => {
-                    return Err(AppErrorDto::internal("Failed to clear credentials"));
+        match entry()?.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(_) => Err(AppErrorDto::internal("Failed to clear credentials")),
+        }
+    }
+
+    /// Old-console App Id + Access Token cannot be converted into an API Key,
+    /// so best-effort delete them from both the current and pre-rename services.
+    pub fn migrate_legacy() {
+        for service in [SERVICE, LEGACY_SERVICE] {
+            for account in LEGACY_ACCOUNTS {
+                if let Ok(legacy) = Entry::new(service, account) {
+                    let _ = legacy.delete_credential();
                 }
             }
         }
-        Ok(())
     }
 }
 
@@ -139,11 +127,9 @@ mod dashscope_store {
 
     pub fn get() -> CmdResult<Option<DashScopeCredentials>> {
         Ok(MEMORY.with(|cell| {
-            cell.borrow()
-                .as_ref()
-                .map(|api_key| DashScopeCredentials {
-                    api_key: api_key.clone(),
-                })
+            cell.borrow().as_ref().map(|api_key| DashScopeCredentials {
+                api_key: api_key.clone(),
+            })
         }))
     }
 
@@ -171,7 +157,8 @@ mod dashscope_store {
     use super::*;
     use keyring::Entry;
 
-    const SERVICE: &str = "meetly";
+    const SERVICE: &str = "meetphant";
+    const LEGACY_SERVICE: &str = "meetly";
     const ACCOUNT_API_KEY: &str = "dashscope_api_key";
 
     fn entry() -> CmdResult<Entry> {
@@ -208,6 +195,25 @@ mod dashscope_store {
             Err(_) => Err(AppErrorDto::internal("Failed to clear credentials")),
         }
     }
+
+    /// One-time migration from the pre-rename `meetly` keyring service.
+    pub fn migrate_legacy() {
+        if matches!(get(), Ok(Some(_))) {
+            return;
+        }
+        let Ok(legacy_entry) = Entry::new(LEGACY_SERVICE, ACCOUNT_API_KEY) else {
+            return;
+        };
+        let Ok(api_key) = legacy_entry.get_password() else {
+            return;
+        };
+        if api_key.is_empty() {
+            return;
+        }
+        if set(&api_key).is_ok() {
+            let _ = legacy_entry.delete_credential();
+        }
+    }
 }
 
 pub fn is_configured() -> bool {
@@ -234,16 +240,15 @@ pub fn require_dashscope_credentials() -> CmdResult<DashScopeCredentials> {
     dashscope_store::get()?.ok_or_else(AppErrorDto::summary_not_configured)
 }
 
-/// Persist Doubao credentials. Empty strings are rejected.
-pub fn set_credentials(app_id: &str, access_token: &str) -> CmdResult<()> {
-    let app_id = app_id.trim();
-    let access_token = access_token.trim();
-    if app_id.is_empty() || access_token.is_empty() {
+/// Persist Doubao API key. Empty strings are rejected.
+pub fn set_credentials(api_key: &str) -> CmdResult<()> {
+    let api_key = api_key.trim();
+    if api_key.is_empty() {
         return Err(AppErrorDto::settings_invalid(
-            "Doubao app id and access token cannot be empty",
+            "Doubao API key cannot be empty",
         ));
     }
-    doubao_store::set(app_id, access_token)
+    doubao_store::set(api_key)
 }
 
 /// Persist DashScope API key. Empty strings are rejected.
@@ -285,8 +290,7 @@ mod tos_store {
 
     pub fn set(access_key_id: &str, secret_access_key: &str) -> CmdResult<()> {
         MEMORY.with(|cell| {
-            *cell.borrow_mut() =
-                Some((access_key_id.to_string(), secret_access_key.to_string()));
+            *cell.borrow_mut() = Some((access_key_id.to_string(), secret_access_key.to_string()));
         });
         Ok(())
     }
@@ -308,7 +312,8 @@ mod tos_store {
     use super::*;
     use keyring::Entry;
 
-    const SERVICE: &str = "meetly";
+    const SERVICE: &str = "meetphant";
+    const LEGACY_SERVICE: &str = "meetly";
     const ACCOUNT_AK: &str = "tos_access_key_id";
     const ACCOUNT_SK: &str = "tos_secret_access_key";
 
@@ -370,6 +375,31 @@ mod tos_store {
         }
         Ok(())
     }
+
+    /// One-time migration from the pre-rename `meetly` keyring service.
+    pub fn migrate_legacy() {
+        if matches!(get(), Ok(Some(_))) {
+            return;
+        }
+        let Ok(ak_entry) = Entry::new(LEGACY_SERVICE, ACCOUNT_AK) else {
+            return;
+        };
+        let Ok(sk_entry) = Entry::new(LEGACY_SERVICE, ACCOUNT_SK) else {
+            return;
+        };
+        let (Ok(access_key_id), Ok(secret_access_key)) =
+            (ak_entry.get_password(), sk_entry.get_password())
+        else {
+            return;
+        };
+        if access_key_id.is_empty() || secret_access_key.is_empty() {
+            return;
+        }
+        if set(&access_key_id, &secret_access_key).is_ok() {
+            let _ = ak_entry.delete_credential();
+            let _ = sk_entry.delete_credential();
+        }
+    }
 }
 
 pub fn is_tos_secrets_configured() -> bool {
@@ -407,19 +437,31 @@ pub fn reset_for_test() {
     tos_store::reset_for_test();
 }
 
+/// Move any credentials saved under the pre-rename `meetly` keyring service
+/// over to the current `meetphant` service, and drop unsupported old-console
+/// Doubao App Id / Access Token entries. Safe to call on every startup.
+#[cfg(not(test))]
+pub fn migrate_legacy_credentials() {
+    doubao_store::migrate_legacy();
+    dashscope_store::migrate_legacy();
+    tos_store::migrate_legacy();
+}
+
+#[cfg(test)]
+pub fn migrate_legacy_credentials() {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn configured_flag_false_until_both_set() {
+    fn configured_flag_false_until_api_key_set() {
         reset_for_test();
         assert!(!is_configured());
-        set_credentials("app", "token").expect("set");
+        set_credentials("  doubao-api-key  ").expect("set");
         assert!(is_configured());
         let creds = get_credentials().expect("get").expect("some");
-        assert_eq!(creds.app_id, "app");
-        assert_eq!(creds.access_token, "token");
+        assert_eq!(creds.api_key, "doubao-api-key");
         clear_credentials().expect("clear");
         assert!(!is_configured());
     }
@@ -427,8 +469,9 @@ mod tests {
     #[test]
     fn empty_credentials_rejected() {
         reset_for_test();
-        let err = set_credentials(" ", "token").expect_err("empty app");
+        let err = set_credentials("   ").expect_err("empty key");
         assert_eq!(err.code, "SETTINGS_INVALID");
+        assert!(!is_configured());
     }
 
     #[test]

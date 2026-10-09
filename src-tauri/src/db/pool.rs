@@ -54,9 +54,7 @@ fn ensure_tos_settings_columns(conn: &Connection) -> CmdResult<()> {
     for col in needed {
         if !cols.iter().any(|c| c == col) {
             conn.execute(
-                &format!(
-                    "ALTER TABLE settings ADD COLUMN {col} TEXT NOT NULL DEFAULT ''"
-                ),
+                &format!("ALTER TABLE settings ADD COLUMN {col} TEXT NOT NULL DEFAULT ''"),
                 [],
             )
             .map_err(AppErrorDto::from)?;

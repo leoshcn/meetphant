@@ -345,14 +345,14 @@ export function TranscriptionImportPanel({
   if (layout === "stage") {
     return (
       <section className={styles.stage}>
-        <p className={styles.brand}>Meetly</p>
+        <p className={styles.brand}>Meetphant</p>
         <h1 className={styles.stageTitle}>把会议录音变成可带走的纪要</h1>
         <p className={styles.stageLead}>
           导入本地音频，自动转写并整理要点、待办与决策。
         </p>
         <div className={styles.stageAction}>{importButton}</div>
         <p className={styles.stageHint}>
-          ≤20 MiB 极速转写 · 更大文件需配置火山 TOS（上限 512 MiB）
+          豆包录音文件识别 2.0 · 需配置火山 TOS（上限 512 MiB）
         </p>
         {job && busy && (
           <p className={styles.status}>正在转写…（{job.status}）</p>

@@ -7,15 +7,10 @@ use rusqlite::Connection;
 use uuid::Uuid;
 
 use crate::error::{AppErrorDto, CmdResult};
-use crate::models::{
-    render_transcript_text, Meeting, Transcript, TranscriptSegment,
-};
+use crate::models::{render_transcript_text, Meeting, Transcript, TranscriptSegment};
 use crate::providers::doubao::parse_asr_transcript;
 
-/// Flash/base64 ASR path cap (20 MiB). Files at or below this size do not need TOS.
-pub const FLASH_MAX_AUDIO_BYTES: u64 = 20 * 1024 * 1024;
-
-/// Hard reject cap for import / async path (512 MiB).
+/// Hard reject cap for import / Seed-ASR 2.0 path (512 MiB).
 pub const ASYNC_MAX_AUDIO_BYTES: u64 = 512 * 1024 * 1024;
 
 /// Default title for draft meetings created via「新建项目」.
@@ -28,9 +23,8 @@ fn validate_audio_path(path: &str) -> CmdResult<&Path> {
     }
 
     let file_path = Path::new(path);
-    let meta = fs::metadata(file_path).map_err(|_| {
-        AppErrorDto::io_error("Cannot read audio file")
-    })?;
+    let meta =
+        fs::metadata(file_path).map_err(|_| AppErrorDto::io_error("Cannot read audio file"))?;
     if !meta.is_file() {
         return Err(AppErrorDto::io_error("Path is not a file"));
     }
@@ -152,9 +146,7 @@ pub fn list_meetings(conn: &Connection) -> CmdResult<Vec<Meeting>> {
 
 pub fn get_meeting(conn: &Connection, meeting_id: &str) -> CmdResult<Meeting> {
     let mut stmt = conn
-        .prepare(
-            "SELECT id, source_path, title, created_at FROM meetings WHERE id = ?1",
-        )
+        .prepare("SELECT id, source_path, title, created_at FROM meetings WHERE id = ?1")
         .map_err(AppErrorDto::from)?;
 
     stmt.query_row(rusqlite::params![meeting_id], |row| {
@@ -166,9 +158,7 @@ pub fn get_meeting(conn: &Connection, meeting_id: &str) -> CmdResult<Meeting> {
         })
     })
     .map_err(|err| match err {
-        rusqlite::Error::QueryReturnedNoRows => {
-            AppErrorDto::not_found("Meeting not found")
-        }
+        rusqlite::Error::QueryReturnedNoRows => AppErrorDto::not_found("Meeting not found"),
         other => AppErrorDto::from(other),
     })
 }
@@ -176,7 +166,9 @@ pub fn get_meeting(conn: &Connection, meeting_id: &str) -> CmdResult<Meeting> {
 pub fn rename_meeting(conn: &Connection, meeting_id: &str, title: &str) -> CmdResult<Meeting> {
     let title = title.trim();
     if title.is_empty() {
-        return Err(AppErrorDto::invalid_argument("Meeting title cannot be empty"));
+        return Err(AppErrorDto::invalid_argument(
+            "Meeting title cannot be empty",
+        ));
     }
     let _ = get_meeting(conn, meeting_id)?;
     conn.execute(
@@ -248,9 +240,7 @@ pub fn get_transcript(conn: &Connection, meeting_id: &str) -> CmdResult<Transcri
         ))
     })
     .map_err(|err| match err {
-        rusqlite::Error::QueryReturnedNoRows => {
-            AppErrorDto::not_found("Transcript not found")
-        }
+        rusqlite::Error::QueryReturnedNoRows => AppErrorDto::not_found("Transcript not found"),
         other => AppErrorDto::from(other),
     })
     .and_then(|(meeting_id, text, segments_json, names_json)| {
@@ -392,7 +382,7 @@ mod tests {
     fn create_and_get_meeting() {
         let conn = open_memory().expect("db");
         let dir = std::env::temp_dir();
-        let path = dir.join(format!("meetly-test-{}.wav", Uuid::new_v4()));
+        let path = dir.join(format!("meetphant-test-{}.wav", Uuid::new_v4()));
         {
             let mut f = fs::File::create(&path).expect("create");
             f.write_all(b"RIFF").expect("write");
@@ -411,13 +401,12 @@ mod tests {
         assert!(draft.source_path.is_empty());
 
         let dir = std::env::temp_dir();
-        let path = dir.join(format!("meetly-attach-{}.wav", Uuid::new_v4()));
+        let path = dir.join(format!("meetphant-attach-{}.wav", Uuid::new_v4()));
         {
             let mut f = fs::File::create(&path).expect("create");
             f.write_all(b"RIFF").expect("write");
         }
-        let attached =
-            attach_source(&conn, &draft.id, path.to_str().unwrap()).expect("attach");
+        let attached = attach_source(&conn, &draft.id, path.to_str().unwrap()).expect("attach");
         assert_eq!(attached.id, draft.id);
         assert_eq!(attached.source_path, path.to_str().unwrap());
         assert_eq!(
@@ -425,8 +414,8 @@ mod tests {
             path.file_stem().and_then(|s| s.to_str())
         );
 
-        let err = attach_source(&conn, &draft.id, path.to_str().unwrap())
-            .expect_err("second attach");
+        let err =
+            attach_source(&conn, &draft.id, path.to_str().unwrap()).expect_err("second attach");
         assert_eq!(err.code, "INVALID_ARGUMENT");
         let _ = fs::remove_file(&path);
     }
@@ -438,13 +427,12 @@ mod tests {
         rename_meeting(&conn, &draft.id, "周会").unwrap();
 
         let dir = std::env::temp_dir();
-        let path = dir.join(format!("meetly-keep-title-{}.wav", Uuid::new_v4()));
+        let path = dir.join(format!("meetphant-keep-title-{}.wav", Uuid::new_v4()));
         {
             let mut f = fs::File::create(&path).expect("create");
             f.write_all(b"RIFF").expect("write");
         }
-        let attached =
-            attach_source(&conn, &draft.id, path.to_str().unwrap()).expect("attach");
+        let attached = attach_source(&conn, &draft.id, path.to_str().unwrap()).expect("attach");
         assert_eq!(attached.title.as_deref(), Some("周会"));
         let _ = fs::remove_file(&path);
     }
@@ -453,7 +441,7 @@ mod tests {
     fn list_rename_delete_meeting() {
         let conn = open_memory().expect("db");
         let dir = std::env::temp_dir();
-        let path = dir.join(format!("meetly-list-{}.wav", Uuid::new_v4()));
+        let path = dir.join(format!("meetphant-list-{}.wav", Uuid::new_v4()));
         {
             let mut f = fs::File::create(&path).expect("create");
             f.write_all(b"RIFF").expect("write");
@@ -494,7 +482,7 @@ mod tests {
     fn rejects_oversized_file() {
         let conn = open_memory().expect("db");
         let dir = std::env::temp_dir();
-        let path = dir.join(format!("meetly-big-{}.wav", Uuid::new_v4()));
+        let path = dir.join(format!("meetphant-big-{}.wav", Uuid::new_v4()));
         {
             let f = fs::File::create(&path).expect("create");
             f.set_len(ASYNC_MAX_AUDIO_BYTES + 1).expect("size");
@@ -505,13 +493,13 @@ mod tests {
     }
 
     #[test]
-    fn accepts_file_between_flash_and_async_cap() {
+    fn accepts_large_file_under_async_cap() {
         let conn = open_memory().expect("db");
         let dir = std::env::temp_dir();
-        let path = dir.join(format!("meetly-mid-{}.wav", Uuid::new_v4()));
+        let path = dir.join(format!("meetphant-mid-{}.wav", Uuid::new_v4()));
         {
             let f = fs::File::create(&path).expect("create");
-            f.set_len(FLASH_MAX_AUDIO_BYTES + 1).expect("size");
+            f.set_len(20 * 1024 * 1024 + 1).expect("size");
         }
         let meeting = create_from_file(&conn, path.to_str().unwrap()).expect("create");
         assert!(!meeting.id.is_empty());

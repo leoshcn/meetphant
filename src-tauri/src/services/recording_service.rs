@@ -220,12 +220,10 @@ impl RecordingSession {
     pub fn spawn() -> Self {
         let (tx, rx) = mpsc::channel::<WorkerRequest>();
         thread::Builder::new()
-            .name("meetly-recording".into())
+            .name("meetphant-recording".into())
             .spawn(move || worker_loop(rx))
             .expect("failed to spawn recording worker thread");
-        Self {
-            tx: Mutex::new(tx),
-        }
+        Self { tx: Mutex::new(tx) }
     }
 
     fn send(&self, req: WorkerRequest) -> CmdResult<()> {
@@ -338,10 +336,9 @@ fn worker_loop(rx: Receiver<WorkerRequest>) {
 }
 
 pub fn default_recording_dir() -> CmdResult<PathBuf> {
-    let docs = dirs::document_dir().ok_or_else(|| {
-        AppErrorDto::io_error("Could not resolve the user Documents folder")
-    })?;
-    Ok(docs.join("Meetly").join("Recordings"))
+    let docs = dirs::document_dir()
+        .ok_or_else(|| AppErrorDto::io_error("Could not resolve the user Documents folder"))?;
+    Ok(docs.join("Meetphant").join("Recordings"))
 }
 
 pub fn resolve_recording_dir(stored: &str) -> CmdResult<PathBuf> {
@@ -379,27 +376,22 @@ pub fn validate_recording_dir_override(raw: &str) -> CmdResult<String> {
 }
 
 pub fn ensure_dir_writable(dir: &Path) -> CmdResult<()> {
-    std::fs::create_dir_all(dir).map_err(|_| {
-        AppErrorDto::io_error("Could not create the recording directory")
-    })?;
+    std::fs::create_dir_all(dir)
+        .map_err(|_| AppErrorDto::io_error("Could not create the recording directory"))?;
 
-    let probe = dir.join(".meetly-write-probe");
+    let probe = dir.join(".meetphant-write-probe");
     match std::fs::write(&probe, b"ok") {
         Ok(()) => {
             let _ = std::fs::remove_file(&probe);
             Ok(())
         }
-        Err(_) => Err(AppErrorDto::io_error(
-            "Recording directory is not writable",
-        )),
+        Err(_) => Err(AppErrorDto::io_error("Recording directory is not writable")),
     }
 }
 
 pub fn list_input_devices() -> CmdResult<DevicesResponse> {
     let host = cpal::default_host();
-    let default_name = host
-        .default_input_device()
-        .and_then(|d| d.name().ok());
+    let default_name = host.default_input_device().and_then(|d| d.name().ok());
 
     let devices_iter = host.input_devices().map_err(|e| {
         AppErrorDto::record_device_error(format!("Failed to enumerate input devices: {e}"))
@@ -460,9 +452,10 @@ fn find_input_device(device_id: Option<&str>) -> CmdResult<(cpal::Device, String
             AppErrorDto::record_device_error("Selected audio input device was not found")
         })?;
 
-    let index: usize = meta.id.parse().map_err(|_| {
-        AppErrorDto::record_device_error("Invalid audio input device id")
-    })?;
+    let index: usize = meta
+        .id
+        .parse()
+        .map_err(|_| AppErrorDto::record_device_error("Invalid audio input device id"))?;
 
     let device = host
         .input_devices()
@@ -492,7 +485,7 @@ fn find_default_output_device() -> CmdResult<(cpal::Device, String)> {
 
 fn build_output_paths(dir: &Path) -> (PathBuf, PathBuf) {
     let stamp = Local::now().format("%Y%m%d-%H%M%S");
-    let stem = format!("Meetly-{stamp}");
+    let stem = format!("Meetphant-{stamp}");
     (
         dir.join(format!("{stem}.m4a")),
         dir.join(format!("{stem}.wav.partial")),
@@ -518,9 +511,8 @@ fn try_encode_wav_to_m4a(wav: &Path, m4a: &Path) -> CmdResult<bool> {
     let wav_s = wav.to_string_lossy().to_string();
     let m4a_s = m4a.to_string_lossy().to_string();
 
-    let ffmpeg_bin = crate::services::ffmpeg_service::resolve_ffmpeg_path().ok_or_else(|| {
-        AppErrorDto::io_error("FFmpeg is not available")
-    })?;
+    let ffmpeg_bin = crate::services::ffmpeg_service::resolve_ffmpeg_path()
+        .ok_or_else(|| AppErrorDto::io_error("FFmpeg is not available"))?;
     let mut child = ffmpeg_sidecar::command::FfmpegCommand::new_with_path(&ffmpeg_bin)
         .create_no_window()
         .overwrite()
@@ -548,9 +540,9 @@ fn try_encode_wav_to_m4a(wav: &Path, m4a: &Path) -> CmdResult<bool> {
         }
     }
 
-    let status = child.wait().map_err(|e| {
-        AppErrorDto::io_error(format!("Failed while waiting for M4A encoder: {e}"))
-    })?;
+    let status = child
+        .wait()
+        .map_err(|e| AppErrorDto::io_error(format!("Failed while waiting for M4A encoder: {e}")))?;
     if !status.success() {
         let _ = std::fs::remove_file(m4a);
         let detail = last_error.unwrap_or_else(|| format!("exit status {status}"));
@@ -636,12 +628,10 @@ fn start_recording_windows(
         sample_format: hound::SampleFormat::Int,
     };
 
-    let file = File::create(&wav_path).map_err(|_| {
-        AppErrorDto::io_error("Could not create the temporary recording file")
-    })?;
-    let writer = WavWriter::new(BufWriter::new(file), spec).map_err(|_| {
-        AppErrorDto::io_error("Could not initialize the WAV writer")
-    })?;
+    let file = File::create(&wav_path)
+        .map_err(|_| AppErrorDto::io_error("Could not create the temporary recording file"))?;
+    let writer = WavWriter::new(BufWriter::new(file), spec)
+        .map_err(|_| AppErrorDto::io_error("Could not initialize the WAV writer"))?;
 
     let mix = Arc::new(Mutex::new(SharedMix {
         mic: VecDeque::new(),
@@ -840,9 +830,8 @@ fn finalize_recording(active: ActiveRecording) -> CmdResult<RecordStopResponse> 
         Ok(false) => {
             prefetch_ffmpeg_in_background();
             let wav_final = m4a_path.with_extension("wav");
-            std::fs::rename(&wav_path, &wav_final).map_err(|_| {
-                AppErrorDto::io_error("Could not save the recording as WAV")
-            })?;
+            std::fs::rename(&wav_path, &wav_final)
+                .map_err(|_| AppErrorDto::io_error("Could not save the recording as WAV"))?;
             wav_final
         }
         Err(err) => {
@@ -871,11 +860,11 @@ mod tests {
     use std::fs;
 
     #[test]
-    fn resolve_empty_uses_documents_meetly_recordings() {
+    fn resolve_empty_uses_documents_meetphant_recordings() {
         let path = resolve_recording_dir("").expect("resolve");
         let path_str = path.to_string_lossy().replace('\\', "/");
         assert!(
-            path_str.ends_with("Meetly/Recordings"),
+            path_str.ends_with("Meetphant/Recordings"),
             "unexpected default path: {path_str}"
         );
     }
@@ -883,9 +872,9 @@ mod tests {
     #[test]
     fn resolve_override_keeps_absolute_path() {
         let override_path = if cfg!(windows) {
-            r"D:\tmp\meetly-recs"
+            r"D:\tmp\meetphant-recs"
         } else {
-            "/tmp/meetly-recs"
+            "/tmp/meetphant-recs"
         };
         let path = resolve_recording_dir(override_path).expect("resolve");
         assert_eq!(path, PathBuf::from(override_path));
@@ -905,13 +894,9 @@ mod tests {
 
     #[test]
     fn validate_writable_absolute_dir() {
-        let base = std::env::temp_dir().join(format!(
-            "meetly-rec-test-{}",
-            std::process::id()
-        ));
+        let base = std::env::temp_dir().join(format!("meetphant-rec-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&base);
-        let validated =
-            validate_recording_dir_override(&base.to_string_lossy()).expect("validate");
+        let validated = validate_recording_dir_override(&base.to_string_lossy()).expect("validate");
         assert_eq!(validated, base.to_string_lossy());
         assert!(base.is_dir());
         let _ = fs::remove_dir_all(&base);
@@ -984,17 +969,11 @@ mod tests {
 
     #[test]
     fn output_paths_use_m4a_final_and_wav_partial() {
-        let dir = PathBuf::from(if cfg!(windows) {
-            r"D:\tmp"
-        } else {
-            "/tmp"
-        });
+        let dir = PathBuf::from(if cfg!(windows) { r"D:\tmp" } else { "/tmp" });
         let (m4a, wav) = build_output_paths(&dir);
         assert!(m4a
             .extension()
             .is_some_and(|e| e.eq_ignore_ascii_case("m4a")));
-        assert!(wav
-            .to_string_lossy()
-            .ends_with(".wav.partial"));
+        assert!(wav.to_string_lossy().ends_with(".wav.partial"));
     }
 }

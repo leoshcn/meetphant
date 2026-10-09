@@ -73,11 +73,11 @@ jobs:
       - name: Upload installers (workflow artifacts)
         uses: actions/upload-artifact@v4
         with:
-          name: meetly-windows-nsis
+          name: meetphant-windows-nsis
           path: |
-            dist-installers/Meetly_*_x64-setup.exe
-            dist-installers/Meetly_*_x64-setup.exe.sig
-            dist-installers/Meetly_*_x64-offline-setup.exe
+            dist-installers/Meetphant_*_x64-setup.exe
+            dist-installers/Meetphant_*_x64-setup.exe.sig
+            dist-installers/Meetphant_*_x64-offline-setup.exe
             dist-installers/latest.json
           if-no-files-found: error
 
@@ -92,18 +92,18 @@ jobs:
 
             | File | Variant |
             |------|---------|
-            | `Meetly_*_x64-setup.exe` | **Lean (recommended)** — FFmpeg downloads on first encode; **in-app updater** uses this build |
-            | `Meetly_*_x64-offline-setup.exe` | **Offline** — FFmpeg bundled (larger); manual install only |
+            | `Meetphant_*_x64-setup.exe` | **Lean (recommended)** — FFmpeg downloads on first encode; **in-app updater** uses this build |
+            | `Meetphant_*_x64-offline-setup.exe` | **Offline** — FFmpeg bundled (larger); manual install only |
 
-            Same app id (`com.meetly.app`); installing one replaces the other.
+            Same app id (`com.meetphant.app`); installing one replaces the other.
 
             Auto-update manifest: `latest.json` (lean channel only).
 
             Bundled/runtime FFmpeg pin: see `scripts/ffmpeg-pin.json` (Gyan essentials, GPLv3).
           files: |
-            dist-installers/Meetly_*_x64-setup.exe
-            dist-installers/Meetly_*_x64-setup.exe.sig
-            dist-installers/Meetly_*_x64-offline-setup.exe
+            dist-installers/Meetphant_*_x64-setup.exe
+            dist-installers/Meetphant_*_x64-setup.exe.sig
+            dist-installers/Meetphant_*_x64-offline-setup.exe
             dist-installers/latest.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

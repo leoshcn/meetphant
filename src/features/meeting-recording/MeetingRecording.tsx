@@ -322,7 +322,7 @@ export function MeetingRecordingPanel({
   if (recording) {
     return (
       <section className={styles.stage}>
-        <p className={styles.brand}>Meetly</p>
+        <p className={styles.brand}>Meetphant</p>
         <h1 className={styles.stageTitle}>正在录音</h1>
         <p className={styles.timer} aria-live="polite">
           {formatRecordingElapsed(elapsedMs)}
@@ -354,7 +354,7 @@ export function MeetingRecordingPanel({
 
   return (
     <section className={styles.stage}>
-      <p className={styles.brand}>Meetly</p>
+      <p className={styles.brand}>Meetphant</p>
       <h1 className={styles.stageTitle}>把会议录音变成可带走的纪要</h1>
       <p className={styles.stageLead}>
         开始录音将同时捕获麦克风与系统扬声器（会议对方声音），或导入本地音频，自动转写并整理纪要。
@@ -398,7 +398,7 @@ export function MeetingRecordingPanel({
       </div>
 
       <p className={styles.stageHint}>
-        系统声音来自默认播放设备 · ≤20 MiB 极速转写 · 更大文件需配置 TOS
+        系统声音来自默认播放设备 · 转写需配置豆包 API Key 与火山 TOS
       </p>
 
       {error && (

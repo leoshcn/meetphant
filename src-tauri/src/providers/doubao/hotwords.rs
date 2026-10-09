@@ -1,9 +1,9 @@
 //! Hotwords → Doubao `request.corpus.context` JSON string.
-//! Meetly `context_text` must never appear here.
+//! Meetphant `context_text` must never appear here.
 
 use serde_json::{json, Value};
 
-/// Build the corpus.context JSON string for flash/submit ASR.
+/// Build the corpus.context JSON string for Seed-ASR 2.0 submit.
 /// Returns `None` when there are no hotwords (omit the field).
 pub fn build_corpus_context(hotwords: &[String]) -> Option<String> {
     let words: Vec<Value> = hotwords
@@ -17,13 +17,10 @@ pub fn build_corpus_context(hotwords: &[String]) -> Option<String> {
         return None;
     }
 
-    Some(
-        json!({ "hotwords": words })
-            .to_string(),
-    )
+    Some(json!({ "hotwords": words }).to_string())
 }
 
-/// Ensure a serialized body never contains Meetly summary context under a mistaken key.
+/// Ensure a serialized body never contains Meetphant summary context under a mistaken key.
 pub fn body_excludes_context_text(body: &Value) -> bool {
     !body.to_string().contains("context_text")
 }
@@ -34,9 +31,9 @@ mod tests {
 
     #[test]
     fn hotwords_serializer_includes_words() {
-        let ctx = build_corpus_context(&["Meetly".into(), "豆包".into()]).expect("some");
+        let ctx = build_corpus_context(&["Meetphant".into(), "豆包".into()]).expect("some");
         let parsed: Value = serde_json::from_str(&ctx).expect("json");
-        assert_eq!(parsed["hotwords"][0]["word"], "Meetly");
+        assert_eq!(parsed["hotwords"][0]["word"], "Meetphant");
         assert_eq!(parsed["hotwords"][1]["word"], "豆包");
     }
 

@@ -32,11 +32,18 @@ pub fn run() {
                 .map_err(|e| format!("Failed to resolve app data dir: {e}"))?;
             std::fs::create_dir_all(&data_dir)
                 .map_err(|e| format!("Failed to create app data dir: {e}"))?;
+
+            // One-time migration from the pre-rename `Meetly` app identity;
+            // no-op on fresh installs or once already migrated.
+            let db_path = data_dir.join("meetphant.db");
+            services::migration::migrate_app_data_dir(&data_dir, &db_path);
+            services::migration::migrate_recordings_dir();
+            services::credentials::migrate_legacy_credentials();
+
             let ffmpeg_dir = data_dir.join("ffmpeg");
             std::fs::create_dir_all(&ffmpeg_dir)
                 .map_err(|e| format!("Failed to create FFmpeg dir: {e}"))?;
             services::ffmpeg_service::init_install_dir(ffmpeg_dir);
-            let db_path = data_dir.join("meetly.db");
             let conn = db::open_connection(&db_path)
                 .map_err(|e| format!("Failed to open database: {}", e.message))?;
             app.manage(AppState {

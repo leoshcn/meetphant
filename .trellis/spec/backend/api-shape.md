@@ -22,7 +22,7 @@ Applies when adding or changing any `#[tauri::command]`, frontend `invoke` wrapp
 | `settings_clear_doubao_credentials` | (none) | `Settings` | same |
 | `settings_clear_dashscope_credentials` | (none) | `Settings` | same |
 | `settings_clear_tos_credentials` | (none) | `Settings` | same |
-| `settings_test_doubao` | optional `{ doubao_app_id?, doubao_access_token? }` | `{ ok: true }` | same — merges overrides with keyring; **does not persist** |
+| `settings_test_doubao` | optional `{ doubao_api_key? }` | `{ ok: true }` | same — merges overrides with keyring; **does not persist** |
 | `settings_test_tos` | optional `{ tos_access_key_id?, tos_secret_access_key?, tos_region?, tos_bucket?, tos_endpoint? }` | `{ ok: true }` | same — merges with keyring/SQLite; HeadBucket probe; **does not persist** |
 | `settings_test_dashscope` | optional `{ dashscope_api_key? }` | `{ ok: true }` | same — merges with keyring; GET `/compatible-mode/v1/models`; **does not persist** |
 | `meetings_create` | (none) | `Meeting` (draft: `title` =「未命名项目」, `source_path` = `""`) | `src-tauri/src/commands/meetings.rs` |
@@ -82,10 +82,8 @@ type Settings = {
 type SettingsUpdate = {
   hotwords?: string[];
   context_text?: string;
-  /** Write-only; never returned by settings_get. */
-  doubao_app_id?: string;
-  /** Write-only; never returned by settings_get. */
-  doubao_access_token?: string;
+  /** Write-only Doubao new-console API Key (sent as `X-Api-Key`); never returned by settings_get. */
+  doubao_api_key?: string;
   /** Write-only DashScope API key; never returned by settings_get. */
   dashscope_api_key?: string;
   /** Write-only TOS Access Key Id; never returned by settings_get. */
@@ -102,8 +100,7 @@ type SettingsUpdate = {
 };
 /** Optional write-only overrides for settings_test_*; empty/omit → use saved. Never persisted by test commands. */
 type SettingsTestDoubaoOverrides = {
-  doubao_app_id?: string;
-  doubao_access_token?: string;
+  doubao_api_key?: string;
 };
 type SettingsTestTosOverrides = {
   tos_access_key_id?: string;
@@ -158,9 +155,9 @@ type Summary = {
 
 | Field | Consumer | Must NOT |
 |-------|----------|----------|
-| `hotwords` | Doubao flash + async ASR (`request.corpus.context`) | Be required for summary |
-| `context_text` | Qwen summarizer | Be sent to Doubao ASR (flash or async) |
-| `doubao_app_id` / `doubao_access_token` | OS keyring via `settings_update` | Appear in any `settings_get` / logs |
+| `hotwords` | Doubao Seed-ASR 2.0 submit (`request.corpus.context`) | Be required for summary |
+| `context_text` | Qwen summarizer | Be sent to Doubao ASR |
+| `doubao_api_key` | OS keyring via `settings_update`; sent only as `X-Api-Key` | Appear in any `settings_get` / logs |
 | `doubao_configured` | UI status only | Imply returning secret material |
 | `dashscope_api_key` | OS keyring via `settings_update` | Appear in any `settings_get` / logs |
 | `dashscope_configured` | UI status only | Imply returning secret material |
@@ -172,7 +169,7 @@ type Summary = {
 
 | Store | Rule |
 |-------|------|
-| OS keyring (`meetly` / `doubao_app_id`, `doubao_access_token`) | Write via settings; read only inside provider |
+| OS keyring (`meetphant` / `doubao_api_key`) | Write via settings; read only inside provider. Old-console `doubao_app_id` / `doubao_access_token` are unsupported and deleted on startup |
 | OS keyring (`meetly` / `dashscope_api_key`) | Write via settings; read only inside Qwen provider |
 | OS keyring (`meetly` / `tos_access_key_id`, `tos_secret_access_key`) | Write via settings; read only inside TOS provider |
 | SQLite `settings` | Never stores Doubao, DashScope, or TOS secrets; may store `tos_region` / `tos_bucket` / `tos_endpoint` |
@@ -187,22 +184,20 @@ type Summary = {
 - `transcripts.segments_json` / `speaker_names_json` — idempotent via `ensure_transcript_speaker_columns` (`005_transcript_speakers.sql`)
 - `summaries` — `003_summaries.sql`
 
-### Size caps (dual-path)
+### Size cap & path (single path)
 
 | Constant | Value | Role |
 |----------|-------|------|
-| `FLASH_MAX_AUDIO_BYTES` | 20 MiB | Flash/base64 path; no TOS required |
 | `ASYNC_MAX_AUDIO_BYTES` | 512 MiB | Hard reject for import / start / execute |
 
-Path selection at `jobs_start_transcription` / execute:
+Every size uses the same path at `jobs_start_transcription` / execute (Seed-ASR 2.0 only accepts `audio.url`):
 
 | Size | Path |
 |------|------|
-| ≤ 20 MiB | Doubao flash + `audio.data` (base64) |
-| 20 MiB < size ≤ 512 MiB | TOS upload → pre-signed GET → Doubao standard async submit/query |
+| ≤ 512 MiB | TOS upload → pre-signed GET → Doubao Seed-ASR 2.0 submit/query (`X-Api-Resource-Id: volc.seedasr.auc`, auth `X-Api-Key`) |
 | > 512 MiB | `ASR_PAYLOAD_TOO_LARGE` |
 
-`meetings_create_from_file` rejects only **> 512 MiB** so large files can be stored; path selection happens at transcription start.
+`meetings_create_from_file` rejects only **> 512 MiB** so large files can be stored; TOS is required (for every size) at transcription start.
 `meetings_create` inserts a draft (`source_path` empty, title「未命名项目」). `meetings_attach_source` binds a file to a draft only; rejects if `source_path` already set (`INVALID_ARGUMENT`).
 
 Async poll window: **45 minutes** client-side (`ASR_TIMEOUT` on exceed). Pre-signed URL TTL ≥ poll window (2 h).
@@ -216,13 +211,14 @@ Async poll window: **45 minutes** client-side (`ASR_TIMEOUT` on exceed). Pre-sig
 | Empty / whitespace hotword | `SETTINGS_INVALID` | No DB write |
 | SQLite failure | `DB_ERROR` | Generic message (no filesystem paths) |
 | Missing Doubao credentials | `ASR_NOT_CONFIGURED` | No provider call |
-| Incomplete Doubao/TOS merge for test | `SETTINGS_INVALID` | Inline on credentials test |
+| Incomplete TOS merge for test | `SETTINGS_INVALID` | Inline on credentials test |
+| `settings_test_doubao` auth probe rejected | `ASR_PROVIDER_ERROR` | Query with random request id; HTTP 401/403 → failure; needs no TOS / quota |
 | Audio file > 512 MiB | `ASR_PAYLOAD_TOO_LARGE` | Reject before create / start |
 | Attach source to non-draft meeting | `INVALID_ARGUMENT` | `meetings_attach_source` no-op |
-| > 20 MiB without complete TOS config | `TOS_NOT_CONFIGURED` | Fail fast; no job success |
+| Any size without complete TOS config | `TOS_NOT_CONFIGURED` | Fail fast at start; no job created |
 | TOS put / pre-sign failure | `TOS_UPLOAD_ERROR` | Job → `failed` (if already started) |
 | Cannot read audio file | `IO_ERROR` | Safe message |
-| Provider non-success (flash or async) | `ASR_PROVIDER_ERROR` | Job → `failed` |
+| Provider non-success (submit / query) | `ASR_PROVIDER_ERROR` | Job → `failed` |
 | Async poll exceeds 45 min | `ASR_TIMEOUT` | Job → `failed` |
 | Transcript missing / not ready for summary | `SUMMARY_NOT_READY` | No Qwen call |
 | Missing DashScope API key | `SUMMARY_NOT_CONFIGURED` | No Qwen call |
@@ -236,21 +232,21 @@ Async poll window: **45 minutes** client-side (`ASR_TIMEOUT` on exceed). Pre-sig
 
 | Case | Expect |
 |------|--------|
-| Good | ≤20 MiB import → flash job → transcript; or mid-size with TOS → async job → transcript → summary |
+| Good | Import with TOS → TOS upload → Seed-ASR 2.0 job → transcript → summary |
 | Base | Empty DB → settings defaults + all `*_configured: false` + empty TOS non-secret fields |
-| Bad | `hotwords: [""]` → `SETTINGS_INVALID`; no Doubao → `ASR_NOT_CONFIGURED`; >20 MiB no TOS → `TOS_NOT_CONFIGURED`; no DashScope → `SUMMARY_NOT_CONFIGURED` |
+| Bad | `hotwords: [""]` → `SETTINGS_INVALID`; no Doubao → `ASR_NOT_CONFIGURED`; any file without TOS → `TOS_NOT_CONFIGURED`; no DashScope → `SUMMARY_NOT_CONFIGURED` |
 
 ---
 
 ## Tests Required
 
-- Rust: settings (incl. Doubao / DashScope / TOS configured flags, no secret echo), hotwords builder, flash + async stub job transitions, TOS stub put/presign, async poll timeout → `ASR_TIMEOUT`, summary prompt/parse with stub Qwen.
+- Rust: settings (incl. Doubao / DashScope / TOS configured flags, no secret echo), hotwords builder, auth header (`X-Api-Key` only), Seed-ASR resource id, probe classification, async stub job transitions (small + large file via TOS, no-TOS rejection), TOS stub put/presign, async poll timeout → `ASR_TIMEOUT`, summary prompt/parse with stub Qwen.
 - TS: ipc wrappers for settings (incl. `settings_clear_tos_credentials`, `settings_test_*`) / meetings / jobs / summary.
 
 ---
 
 ## Wrong vs Correct
 
-Wrong: UI `invoke` outside `src/ipc`; `context_text` on ASR submit; secrets in SQLite or `settings_get`; rusqlite Display leaked to UI; treating >20 MiB as flash-only / rejecting create at 20 MiB.
+Wrong: UI `invoke` outside `src/ipc`; `context_text` on ASR submit; secrets in SQLite or `settings_get`; rusqlite Display leaked to UI; sending `audio.data` base64 or the 1.0 / flash resource ids; skipping TOS for small files.
 
 Correct: wrappers in `src/ipc/commands/*`; hotwords→ASR / context→summary; keyring secrets; dual-path size gates; sanitized errors.

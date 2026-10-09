@@ -18,8 +18,8 @@ export function buildLatestJson(opts: {
   };
 } {
   const version = opts.version;
-  const repo = opts.repo || "leoshcn/meetly";
-  const assetName = opts.assetName || `Meetly_${version}_x64-setup.exe`;
+  const repo = opts.repo || "leoshcn/meetphant";
+  const assetName = opts.assetName || `Meetphant_${version}_x64-setup.exe`;
   const tag = version.startsWith("v") ? version : `v${version}`;
   const url = `https://github.com/${repo}/releases/download/${tag}/${assetName}`;
   return {

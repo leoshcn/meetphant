@@ -13,7 +13,7 @@ describe("buildLatestJson", () => {
     expect(json.notes).toBe("hi");
     expect(json.platforms["windows-x86_64"]).toEqual({
       signature: "sig-line",
-      url: "https://github.com/leoshcn/meetly/releases/download/v0.3.0/Meetly_0.3.0_x64-setup.exe",
+      url: "https://github.com/leoshcn/meetphant/releases/download/v0.3.0/Meetphant_0.3.0_x64-setup.exe",
     });
   });
 });

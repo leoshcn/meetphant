@@ -4,12 +4,10 @@ use rusqlite::Connection;
 use serde::Serialize;
 
 use crate::error::{AppErrorDto, CmdResult};
-use crate::providers::doubao::flash_client::HttpFlashClient;
+use crate::providers::doubao::HttpAsyncClient;
 use crate::providers::qwen::client::HttpQwenClient;
 use crate::providers::tos::{HttpTosClient, TosConfig};
-use crate::services::credentials::{
-    self, DashScopeCredentials, DoubaoCredentials, TosCredentials,
-};
+use crate::services::credentials::{self, DashScopeCredentials, DoubaoCredentials, TosCredentials};
 use crate::services::settings_service;
 
 /// IPC success payload for `settings_test_*`.
@@ -38,31 +36,13 @@ pub fn merge_secret_field(override_val: Option<&str>, saved: Option<&str>) -> Op
         .map(str::to_string)
 }
 
-/// Merge Doubao overrides with keyring. Does not write.
-pub fn merge_doubao_credentials(
-    doubao_app_id: Option<&str>,
-    doubao_access_token: Option<&str>,
-) -> CmdResult<DoubaoCredentials> {
+/// Merge Doubao API key override with keyring. Does not write.
+pub fn merge_doubao_credentials(doubao_api_key: Option<&str>) -> CmdResult<DoubaoCredentials> {
     let saved = credentials::get_credentials()?;
-    let app_id = merge_secret_field(
-        doubao_app_id,
-        saved.as_ref().map(|c| c.app_id.as_str()),
-    );
-    let access_token = merge_secret_field(
-        doubao_access_token,
-        saved.as_ref().map(|c| c.access_token.as_str()),
-    );
-
-    match (app_id, access_token) {
-        (Some(app_id), Some(access_token)) => Ok(DoubaoCredentials {
-            app_id,
-            access_token,
-        }),
-        (None, None) => Err(AppErrorDto::asr_not_configured()),
-        _ => Err(AppErrorDto::settings_invalid(
-            "测试豆包连接需要同时提供 App Id 与 Access Token（或使用已保存的凭证）",
-        )),
-    }
+    let api_key = merge_secret_field(doubao_api_key, saved.as_ref().map(|c| c.api_key.as_str()));
+    api_key
+        .map(|api_key| DoubaoCredentials { api_key })
+        .ok_or_else(AppErrorDto::asr_not_configured)
 }
 
 /// Merge DashScope override with keyring. Does not write.
@@ -98,15 +78,13 @@ pub fn merge_tos_config(
     );
     let secret_access_key = merge_secret_field(
         tos_secret_access_key,
-        saved_secrets
-            .as_ref()
-            .map(|c| c.secret_access_key.as_str()),
+        saved_secrets.as_ref().map(|c| c.secret_access_key.as_str()),
     );
     let region = merge_secret_field(tos_region, Some(settings.tos_region.as_str()));
     let bucket = merge_secret_field(tos_bucket, Some(settings.tos_bucket.as_str()));
     // Endpoint is optional; empty override keeps saved (may also be empty → default).
-    let endpoint = merge_secret_field(tos_endpoint, Some(settings.tos_endpoint.as_str()))
-        .unwrap_or_default();
+    let endpoint =
+        merge_secret_field(tos_endpoint, Some(settings.tos_endpoint.as_str())).unwrap_or_default();
 
     let (Some(access_key_id), Some(secret_access_key), Some(region), Some(bucket)) =
         (access_key_id, secret_access_key, region, bucket)
@@ -138,14 +116,11 @@ pub fn merge_tos_config(
     ))
 }
 
-pub fn test_doubao(
-    doubao_app_id: Option<&str>,
-    doubao_access_token: Option<&str>,
-) -> CmdResult<SettingsTestResult> {
-    let credentials = merge_doubao_credentials(doubao_app_id, doubao_access_token)?;
-    // Never log credentials.
-    let client = HttpFlashClient::new()?;
-    client.probe_connection(&credentials)?;
+pub fn test_doubao(doubao_api_key: Option<&str>) -> CmdResult<SettingsTestResult> {
+    let credentials = merge_doubao_credentials(doubao_api_key)?;
+    // Never log credentials. Auth-only probe: needs no TOS and no recognition quota.
+    let client = HttpAsyncClient::new()?;
+    client.probe_auth(&credentials)?;
     Ok(SettingsTestResult::ok())
 }
 
@@ -205,25 +180,20 @@ mod tests {
     #[test]
     fn doubao_not_configured_without_saved_or_override() {
         reset_for_test();
-        let err = merge_doubao_credentials(None, None).expect_err("missing");
+        let err = merge_doubao_credentials(None).expect_err("missing");
+        assert_eq!(err.code, "ASR_NOT_CONFIGURED");
+        let err = merge_doubao_credentials(Some("   ")).expect_err("blank");
         assert_eq!(err.code, "ASR_NOT_CONFIGURED");
     }
 
     #[test]
-    fn doubao_partial_override_without_partner_is_invalid() {
+    fn doubao_override_wins_over_saved_key() {
         reset_for_test();
-        let err = merge_doubao_credentials(Some("app-only"), None).expect_err("partial");
-        assert_eq!(err.code, "SETTINGS_INVALID");
-        assert!(!err.message.contains("app-only"));
-    }
-
-    #[test]
-    fn doubao_merges_override_app_with_saved_token() {
-        reset_for_test();
-        credentials::set_credentials("saved-app", "saved-token").unwrap();
-        let merged = merge_doubao_credentials(Some("new-app"), None).expect("merge");
-        assert_eq!(merged.app_id, "new-app");
-        assert_eq!(merged.access_token, "saved-token");
+        credentials::set_credentials("saved-key").unwrap();
+        let merged = merge_doubao_credentials(Some(" form-key ")).expect("merge");
+        assert_eq!(merged.api_key, "form-key");
+        let merged = merge_doubao_credentials(None).expect("saved");
+        assert_eq!(merged.api_key, "saved-key");
     }
 
     #[test]
@@ -272,26 +242,19 @@ mod tests {
             &conn,
             SettingsUpdate {
                 tos_region: Some("cn-beijing".into()),
-                tos_bucket: Some("meetly-audio".into()),
+                tos_bucket: Some("meetphant-audio".into()),
                 tos_endpoint: Some("".into()),
                 ..Default::default()
             },
         )
         .expect("non-secrets");
 
-        let config = merge_tos_config(
-            &conn,
-            Some("AKFORM"),
-            Some("SKFORM"),
-            None,
-            None,
-            None,
-        )
-        .expect("merge");
+        let config = merge_tos_config(&conn, Some("AKFORM"), Some("SKFORM"), None, None, None)
+            .expect("merge");
         assert_eq!(config.credentials.access_key_id, "AKFORM");
         assert_eq!(config.credentials.secret_access_key, "SKFORM");
         assert_eq!(config.region, "cn-beijing");
-        assert_eq!(config.bucket, "meetly-audio");
+        assert_eq!(config.bucket, "meetphant-audio");
         assert!(config.endpoint.contains("cn-beijing"));
     }
 
@@ -305,7 +268,7 @@ mod tests {
                 tos_access_key_id: Some("AKSAVED".into()),
                 tos_secret_access_key: Some("SKSAVED".into()),
                 tos_region: Some("cn-beijing".into()),
-                tos_bucket: Some("meetly-audio".into()),
+                tos_bucket: Some("meetphant-audio".into()),
                 ..Default::default()
             },
         )
@@ -323,7 +286,7 @@ mod tests {
 
         let settings = settings_service::get_settings(&conn).expect("get");
         assert_eq!(settings.tos_region, "cn-beijing");
-        assert_eq!(settings.tos_bucket, "meetly-audio");
+        assert_eq!(settings.tos_bucket, "meetphant-audio");
         let saved = credentials::get_tos_credentials()
             .expect("get")
             .expect("some");

@@ -32,8 +32,7 @@ export function settingsTestDoubao(
   overrides: SettingsTestDoubaoOverrides = {},
 ): Promise<SettingsTestResult> {
   return invokeCommand<SettingsTestResult>("settings_test_doubao", {
-    doubao_app_id: overrides.doubao_app_id,
-    doubao_access_token: overrides.doubao_access_token,
+    doubao_api_key: overrides.doubao_api_key,
   });
 }
 

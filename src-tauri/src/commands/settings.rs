@@ -15,10 +15,7 @@ pub fn settings_get(state: State<'_, AppState>) -> CmdResult<Settings> {
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub fn settings_update(
-    state: State<'_, AppState>,
-    update: SettingsUpdate,
-) -> CmdResult<Settings> {
+pub fn settings_update(state: State<'_, AppState>, update: SettingsUpdate) -> CmdResult<Settings> {
     let conn = state
         .db
         .lock()
@@ -55,11 +52,8 @@ pub fn settings_clear_tos_credentials(state: State<'_, AppState>) -> CmdResult<S
 
 /// Probe Doubao credentials. Optional overrides merge with keyring; never persists.
 #[tauri::command(rename_all = "snake_case")]
-pub fn settings_test_doubao(
-    doubao_app_id: Option<String>,
-    doubao_access_token: Option<String>,
-) -> CmdResult<SettingsTestResult> {
-    services::test_doubao(doubao_app_id.as_deref(), doubao_access_token.as_deref())
+pub fn settings_test_doubao(doubao_api_key: Option<String>) -> CmdResult<SettingsTestResult> {
+    services::test_doubao(doubao_api_key.as_deref())
 }
 
 /// Probe TOS via HeadBucket. Optional overrides merge with keyring/SQLite; never persists.
@@ -88,8 +82,6 @@ pub fn settings_test_tos(
 
 /// Probe DashScope via GET /models. Optional override merges with keyring; never persists.
 #[tauri::command(rename_all = "snake_case")]
-pub fn settings_test_dashscope(
-    dashscope_api_key: Option<String>,
-) -> CmdResult<SettingsTestResult> {
+pub fn settings_test_dashscope(dashscope_api_key: Option<String>) -> CmdResult<SettingsTestResult> {
     services::test_dashscope(dashscope_api_key.as_deref())
 }

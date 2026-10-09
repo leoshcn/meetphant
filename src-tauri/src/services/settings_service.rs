@@ -41,8 +41,7 @@ fn compute_tos_configured(region: &str, bucket: &str) -> bool {
 fn with_configured(mut settings: Settings) -> Settings {
     settings.doubao_configured = credentials::is_configured();
     settings.dashscope_configured = credentials::is_dashscope_configured();
-    settings.tos_configured =
-        compute_tos_configured(&settings.tos_region, &settings.tos_bucket);
+    settings.tos_configured = compute_tos_configured(&settings.tos_region, &settings.tos_bucket);
     settings.recording_dir_resolved =
         crate::services::recording_service::resolve_recording_dir(&settings.recording_dir)
             .map(|p| p.to_string_lossy().to_string())
@@ -134,27 +133,11 @@ pub fn get_settings(conn: &Connection) -> CmdResult<Settings> {
 }
 
 fn apply_credential_update(update: &SettingsUpdate) -> CmdResult<()> {
-    let has_app = update
-        .doubao_app_id
-        .as_ref()
-        .map(|s| !s.trim().is_empty())
-        .unwrap_or(false);
-    let has_token = update
-        .doubao_access_token
-        .as_ref()
-        .map(|s| !s.trim().is_empty())
-        .unwrap_or(false);
-
-    if has_app || has_token {
-        if !(has_app && has_token) {
-            return Err(AppErrorDto::settings_invalid(
-                "Doubao app id and access token must both be provided together",
-            ));
+    if let Some(ref key) = update.doubao_api_key {
+        let trimmed = key.trim();
+        if !trimmed.is_empty() {
+            credentials::set_credentials(trimmed)?;
         }
-        credentials::set_credentials(
-            update.doubao_app_id.as_ref().unwrap(),
-            update.doubao_access_token.as_ref().unwrap(),
-        )?;
     }
 
     if let Some(ref key) = update.dashscope_api_key {
@@ -224,9 +207,7 @@ pub fn update_settings(conn: &Connection, update: SettingsUpdate) -> CmdResult<S
         validate_hotwords(hotwords)?;
     }
     let recording_dir_validated = if let Some(ref raw) = update.recording_dir {
-        Some(crate::services::recording_service::validate_recording_dir_override(
-            raw,
-        )?)
+        Some(crate::services::recording_service::validate_recording_dir_override(raw)?)
     } else {
         None
     };
@@ -241,10 +222,7 @@ pub fn update_settings(conn: &Connection, update: SettingsUpdate) -> CmdResult<S
 
     if let Some(hotwords) = update.hotwords {
         // Persist trimmed forms so empty-looking values never sneak in.
-        current.hotwords = hotwords
-            .into_iter()
-            .map(|w| w.trim().to_string())
-            .collect();
+        current.hotwords = hotwords.into_iter().map(|w| w.trim().to_string()).collect();
     }
 
     if let Some(context_text) = update.context_text {
@@ -315,7 +293,7 @@ mod tests {
             settings
                 .recording_dir_resolved
                 .replace('\\', "/")
-                .ends_with("Meetly/Recordings"),
+                .ends_with("Meetphant/Recordings"),
             "resolved={}",
             settings.recording_dir_resolved
         );
@@ -328,14 +306,14 @@ mod tests {
         let updated = update_settings(
             &conn,
             SettingsUpdate {
-                hotwords: Some(vec!["Meetly".into(), "豆包".into()]),
+                hotwords: Some(vec!["Meetphant".into(), "豆包".into()]),
                 context_text: Some("周会摘要上下文".into()),
                 ..Default::default()
             },
         )
         .expect("update");
 
-        assert_eq!(updated.hotwords, vec!["Meetly", "豆包"]);
+        assert_eq!(updated.hotwords, vec!["Meetphant", "豆包"]);
         assert_eq!(updated.context_text, "周会摘要上下文");
         assert!(!updated.doubao_configured);
 
@@ -395,7 +373,7 @@ mod tests {
         update_settings(
             &conn,
             SettingsUpdate {
-                hotwords: Some(vec!["Meetly".into()]),
+                hotwords: Some(vec!["Meetphant".into()]),
                 context_text: None,
                 ..Default::default()
             },
@@ -412,7 +390,7 @@ mod tests {
         )
         .expect("context");
 
-        assert_eq!(updated.hotwords, vec!["Meetly"]);
+        assert_eq!(updated.hotwords, vec!["Meetphant"]);
         assert_eq!(updated.context_text, "only context");
     }
 
@@ -423,8 +401,7 @@ mod tests {
         let updated = update_settings(
             &conn,
             SettingsUpdate {
-                doubao_app_id: Some("app-id".into()),
-                doubao_access_token: Some("secret-token".into()),
+                doubao_api_key: Some("secret-doubao-key".into()),
                 ..Default::default()
             },
         )
@@ -432,8 +409,7 @@ mod tests {
 
         assert!(updated.doubao_configured);
         let json = serde_json::to_string(&updated).expect("ser");
-        assert!(!json.contains("secret-token"));
-        assert!(!json.contains("app-id"));
+        assert!(!json.contains("secret-doubao-key"));
         assert!(json.contains("doubao_configured"));
 
         let cleared = clear_doubao_credentials(&conn).expect("clear");
@@ -471,7 +447,7 @@ mod tests {
             &conn,
             SettingsUpdate {
                 tos_region: Some("cn-beijing".into()),
-                tos_bucket: Some("meetly-audio".into()),
+                tos_bucket: Some("meetphant-audio".into()),
                 ..Default::default()
             },
         )
@@ -489,7 +465,7 @@ mod tests {
         .expect("secrets");
         assert!(with_secrets.tos_configured);
         assert_eq!(with_secrets.tos_region, "cn-beijing");
-        assert_eq!(with_secrets.tos_bucket, "meetly-audio");
+        assert_eq!(with_secrets.tos_bucket, "meetphant-audio");
 
         let json = serde_json::to_string(&with_secrets).expect("ser");
         assert!(!json.contains("AKTEST"));
@@ -506,10 +482,8 @@ mod tests {
     fn recording_dir_persists_and_resolves() {
         reset_for_test();
         let conn = crate::db::pool::open_memory().expect("memory db");
-        let base = std::env::temp_dir().join(format!(
-            "meetly-settings-rec-{}",
-            std::process::id()
-        ));
+        let base =
+            std::env::temp_dir().join(format!("meetphant-settings-rec-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
 
         let updated = update_settings(
@@ -533,12 +507,10 @@ mod tests {
         )
         .expect("reset");
         assert_eq!(reset.recording_dir, "");
-        assert!(
-            reset
-                .recording_dir_resolved
-                .replace('\\', "/")
-                .ends_with("Meetly/Recordings")
-        );
+        assert!(reset
+            .recording_dir_resolved
+            .replace('\\', "/")
+            .ends_with("Meetphant/Recordings"));
 
         let _ = std::fs::remove_dir_all(&base);
     }

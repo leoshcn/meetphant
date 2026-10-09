@@ -9,7 +9,7 @@ pub const THEME_PREFERENCE_DARK: &str = "dark";
 pub struct Settings {
     pub hotwords: Vec<String>,
     pub context_text: String,
-    /// True when both Doubao app id and access token are present in the OS keyring.
+    /// True when a Doubao API key is present in the OS keyring.
     /// Secrets themselves are never returned over IPC.
     pub doubao_configured: bool,
     /// True when a DashScope API key is present in the OS keyring.
@@ -24,7 +24,7 @@ pub struct Settings {
     pub tos_bucket: String,
     /// Optional custom TOS endpoint; empty means default `https://tos-{region}.volces.com`.
     pub tos_endpoint: String,
-    /// User override for recording output directory. Empty → use default Documents/Meetly/Recordings.
+    /// User override for recording output directory. Empty → use default Documents/Meetphant/Recordings.
     pub recording_dir: String,
     /// Effective recording directory after resolving the empty-default rule.
     pub recording_dir_resolved: String,
@@ -54,10 +54,8 @@ impl Default for Settings {
 pub struct SettingsUpdate {
     pub hotwords: Option<Vec<String>>,
     pub context_text: Option<String>,
-    /// Write-only Doubao App Id (never echoed by settings_get).
-    pub doubao_app_id: Option<String>,
-    /// Write-only Doubao Access Token (never echoed by settings_get).
-    pub doubao_access_token: Option<String>,
+    /// Write-only Doubao new-console API Key (never echoed by settings_get).
+    pub doubao_api_key: Option<String>,
     /// Write-only DashScope API key (never echoed by settings_get).
     pub dashscope_api_key: Option<String>,
     /// Write-only TOS Access Key Id (never echoed by settings_get).

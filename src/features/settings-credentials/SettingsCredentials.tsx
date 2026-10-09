@@ -36,10 +36,8 @@ export function SettingsCredentialsPanel() {
   const [doubaoConfigured, setDoubaoConfigured] = useState(false);
   const [dashscopeConfigured, setDashscopeConfigured] = useState(false);
   const [tosConfigured, setTosConfigured] = useState(false);
-  const [appId, setAppId] = useState("");
-  const [accessToken, setAccessToken] = useState("");
-  const [appIdMasked, setAppIdMasked] = useState(false);
-  const [accessTokenMasked, setAccessTokenMasked] = useState(false);
+  const [doubaoKey, setDoubaoKey] = useState("");
+  const [doubaoMasked, setDoubaoMasked] = useState(false);
   const [dashscopeKey, setDashscopeKey] = useState("");
   const [dashscopeMasked, setDashscopeMasked] = useState(false);
   const [tosAk, setTosAk] = useState("");
@@ -78,15 +76,11 @@ export function SettingsCredentialsPanel() {
       setTosEndpoint(settings.tos_endpoint);
 
       if (settings.doubao_configured) {
-        setAppId("");
-        setAccessToken("");
-        setAppIdMasked(true);
-        setAccessTokenMasked(true);
+        setDoubaoKey("");
+        setDoubaoMasked(true);
       } else {
-        setAppId("");
-        setAccessToken("");
-        setAppIdMasked(false);
-        setAccessTokenMasked(false);
+        setDoubaoKey("");
+        setDoubaoMasked(false);
       }
 
       if (settings.dashscope_configured) {
@@ -170,20 +164,16 @@ export function SettingsCredentialsPanel() {
   }
 
   async function saveDoubao() {
-    if (appIdMasked || accessTokenMasked) return;
-    const nextAppId = appId.trim();
-    const nextToken = accessToken.trim();
-    if (!nextAppId || !nextToken || nextAppId === SECRET_MASK || nextToken === SECRET_MASK) {
-      return;
-    }
+    if (doubaoMasked) return;
+    const nextKey = doubaoKey.trim();
+    if (!nextKey || nextKey === SECRET_MASK) return;
     setStatus("saving");
     setDoubaoError(null);
     setDoubaoSavedHint(false);
     setDoubaoTest("idle");
     try {
       const settings = await settingsUpdate({
-        doubao_app_id: nextAppId,
-        doubao_access_token: nextToken,
+        doubao_api_key: nextKey,
       });
       applySettingsFlags(settings);
       if (!settings.doubao_configured) {
@@ -336,11 +326,8 @@ export function SettingsCredentialsPanel() {
     setDoubaoError(null);
     setDoubaoSavedHint(false);
     const overrides: SettingsTestDoubaoOverrides = {};
-    if (isUsableSecret(appIdMasked, appId)) {
-      overrides.doubao_app_id = appId.trim();
-    }
-    if (isUsableSecret(accessTokenMasked, accessToken)) {
-      overrides.doubao_access_token = accessToken.trim();
+    if (isUsableSecret(doubaoMasked, doubaoKey)) {
+      overrides.doubao_api_key = doubaoKey.trim();
     }
     try {
       await settingsTestDoubao(overrides);
@@ -398,12 +385,9 @@ export function SettingsCredentialsPanel() {
   }
 
   const canSaveDoubao =
-    !appIdMasked &&
-    !accessTokenMasked &&
-    appId.trim().length > 0 &&
-    accessToken.trim().length > 0 &&
-    appId.trim() !== SECRET_MASK &&
-    accessToken.trim() !== SECRET_MASK &&
+    !doubaoMasked &&
+    doubaoKey.trim().length > 0 &&
+    doubaoKey.trim() !== SECRET_MASK &&
     status !== "saving" &&
     status !== "loading";
 
@@ -441,11 +425,9 @@ export function SettingsCredentialsPanel() {
     status !== "loading";
 
   // Merge-ready: form non-empty secret OR saved (configured). Empty unmasked → backend uses keyring.
-  const doubaoAppReady =
-    isUsableSecret(appIdMasked, appId) || doubaoConfigured;
-  const doubaoTokenReady =
-    isUsableSecret(accessTokenMasked, accessToken) || doubaoConfigured;
-  const doubaoTestIncomplete = !(doubaoAppReady && doubaoTokenReady);
+  const doubaoKeyReady =
+    isUsableSecret(doubaoMasked, doubaoKey) || doubaoConfigured;
+  const doubaoTestIncomplete = !doubaoKeyReady;
   const canTestDoubao =
     !doubaoTestIncomplete &&
     doubaoTest !== "testing" &&
@@ -475,8 +457,8 @@ export function SettingsCredentialsPanel() {
   const clearCopy =
     clearTarget === "doubao"
       ? {
-          title: "清除豆包凭证",
-          description: "确定清除已保存的豆包 App Id 与 Access Token？清除后需重新填写才能转写。",
+          title: "清除豆包 API Key",
+          description: "确定清除已保存的豆包 API Key？清除后需重新填写才能转写。",
         }
       : clearTarget === "dashscope"
         ? {
@@ -487,7 +469,7 @@ export function SettingsCredentialsPanel() {
           ? {
               title: "清除 TOS 配置",
               description:
-                "确定清除火山 TOS 的密钥与 Region / Bucket 等配置？大文件转写将不可用，直至重新配置。",
+                "确定清除火山 TOS 的密钥与 Region / Bucket 等配置？转写将不可用，直至重新配置。",
             }
           : { title: "", description: "" };
 
@@ -496,65 +478,45 @@ export function SettingsCredentialsPanel() {
       <section className={styles.panel}>
         <h2>豆包凭证（转写）</h2>
         <p className={styles.hint}>
-          App Id 与 Access Token 保存在本机密钥存储中，不会回传明文。≤20 MiB
-          走极速版；更大文件需同时配置 TOS（上限 512 MiB）。
+          豆包语音新版控制台 API Key 保存在本机密钥存储中，不会回传明文。使用豆包录音文件识别模型
+          2.0，音频需先上传 TOS，请同时配置下方 TOS（上限 512 MiB）。
+        </p>
+        <p className={styles.hint}>
+          已改用新版控制台 API Key；旧版 App Id / Access Token 不再支持。测试连接只校验 API
+          Key 与 2.0 服务权限，不消耗识别额度。
         </p>
         <p
           className={`${styles.status} ${doubaoConfigured ? styles.statusOk : styles.statusWarn}`}
         >
-          {doubaoConfigured ? "已配置豆包凭证" : "尚未配置豆包凭证"}
+          {doubaoConfigured ? "已配置豆包 API Key" : "尚未配置豆包 API Key"}
         </p>
         <div className={styles.fields}>
           <label>
-            App Id
+            API Key
             <input
               type="password"
               autoComplete="off"
-              value={secretDisplay(appIdMasked, appId)}
-              onFocus={() => clearMask(appIdMasked, setAppIdMasked, setAppId)}
-              onChange={(e) => {
-                onSecretChange(
-                  appIdMasked,
-                  setAppIdMasked,
-                  setAppId,
-                  e.target.value,
-                );
-                setDoubaoSavedHint(false);
-                setDoubaoTest("idle");
-              }}
-              placeholder="Doubao App Id"
-            />
-          </label>
-          <label>
-            Access Token
-            <input
-              type="password"
-              autoComplete="off"
-              value={secretDisplay(accessTokenMasked, accessToken)}
+              value={secretDisplay(doubaoMasked, doubaoKey)}
               onFocus={() =>
-                clearMask(
-                  accessTokenMasked,
-                  setAccessTokenMasked,
-                  setAccessToken,
-                )
+                clearMask(doubaoMasked, setDoubaoMasked, setDoubaoKey)
               }
               onChange={(e) => {
                 onSecretChange(
-                  accessTokenMasked,
-                  setAccessTokenMasked,
-                  setAccessToken,
+                  doubaoMasked,
+                  setDoubaoMasked,
+                  setDoubaoKey,
                   e.target.value,
                 );
                 setDoubaoSavedHint(false);
                 setDoubaoTest("idle");
               }}
-              placeholder="Doubao Access Token"
+              placeholder="Doubao API Key"
             />
           </label>
         </div>
         <div className={styles.actions}>
           <Button onClick={() => void saveDoubao()} disabled={!canSaveDoubao}>
-            {status === "saving" ? "保存中…" : "保存凭证"}
+            {status === "saving" ? "保存中…" : "保存 API Key"}
           </Button>
           <Button
             variant="secondary"
@@ -563,7 +525,7 @@ export function SettingsCredentialsPanel() {
               !doubaoConfigured || status === "saving" || status === "loading"
             }
           >
-            清除凭证
+            清除 API Key
           </Button>
           <Button
             variant="secondary"
@@ -571,7 +533,7 @@ export function SettingsCredentialsPanel() {
             disabled={!canTestDoubao}
             title={
               doubaoTestIncomplete
-                ? "请填写 App Id 与 Access Token，或先保存凭证后再测试"
+                ? "请填写 API Key，或先保存后再测试"
                 : undefined
             }
           >
@@ -586,10 +548,10 @@ export function SettingsCredentialsPanel() {
       </section>
 
       <section className={styles.panel}>
-        <h2>火山 TOS（大文件转写）</h2>
+        <h2>火山 TOS（转写必需）</h2>
         <p className={styles.hint}>
           Access Key / Secret Key 保存在本机密钥存储；Region、Bucket
-          与可选 Endpoint 保存在本机。超过 20 MiB 的音频需配置 TOS 才能转写。
+          与可选 Endpoint 保存在本机。所有音频都需经 TOS 上传后转写。
         </p>
         <p
           className={`${styles.status} ${tosConfigured ? styles.statusOk : styles.statusWarn}`}

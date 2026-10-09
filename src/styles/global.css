@@ -354,7 +354,7 @@ textarea:focus:not(:focus-visible) {
 
   background: var(--accent);
 
-  animation: meetly-indeterminate 1.2s ease-in-out infinite;
+  animation: meetphant-indeterminate 1.2s ease-in-out infinite;
 
 }
 
@@ -382,7 +382,7 @@ textarea:focus:not(:focus-visible) {
 
 
 
-@keyframes meetly-indeterminate {
+@keyframes meetphant-indeterminate {
 
   0% {
 
@@ -400,7 +400,7 @@ textarea:focus:not(:focus-visible) {
 
 
 
-@keyframes meetly-fade-up {
+@keyframes meetphant-fade-up {
 
   from {
 
@@ -422,9 +422,9 @@ textarea:focus:not(:focus-visible) {
 
 
 
-.meetly-fade-up {
+.meetphant-fade-up {
 
-  animation: meetly-fade-up 280ms ease-out;
+  animation: meetphant-fade-up 280ms ease-out;
 
 }
 
@@ -444,7 +444,7 @@ textarea:focus:not(:focus-visible) {
 
 
 
-  .meetly-fade-up {
+  .meetphant-fade-up {
 
     animation: none !important;
 

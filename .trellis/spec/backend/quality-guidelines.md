@@ -17,7 +17,7 @@ cd src-tauri && cargo test
 cd src-tauri && cargo clippy -- -D warnings
 ```
 
-Evidence: settings + error + transcription dual-path (flash / TOS+async / timeout) + TOS stub + summary stubs under `cargo test`.
+Evidence: settings + error + transcription single path (TOS + Seed-ASR 2.0 / no-TOS rejection / timeout) + TOS stub + summary stubs under `cargo test`.
 
 ---
 
@@ -34,13 +34,13 @@ Evidence: settings + error + transcription dual-path (flash / TOS+async / timeou
 
 - `CmdResult<T>` on all commands.
 - Migrations under `src-tauri/src/db/migrations/`.
-- Dual-path caps: `FLASH_MAX_AUDIO_BYTES` (20 MiB) vs `ASYNC_MAX_AUDIO_BYTES` (512 MiB).
+- Size cap: `ASYNC_MAX_AUDIO_BYTES` (512 MiB). Every transcription requires TOS (Seed-ASR 2.0 is URL-only).
 
 ---
 
 ## Code Review Checklist
 
 - [ ] Stable error codes (incl. `TOS_*` / `ASR_TIMEOUT`)
-- [ ] Hotwords vs context consumers correct (flash + async)
-- [ ] Tests for invalid settings + DB mapping + dual-path branches
+- [ ] Hotwords vs context consumers correct (Seed-ASR 2.0 submit)
+- [ ] Tests for invalid settings + DB mapping + TOS-required path
 - [ ] No credentials in source / `settings_get`

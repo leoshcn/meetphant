@@ -3,9 +3,7 @@
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::models::{
-    default_speaker_names, render_transcript_text, TranscriptSegment,
-};
+use crate::models::{default_speaker_names, render_transcript_text, TranscriptSegment};
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, PartialEq, Eq)]

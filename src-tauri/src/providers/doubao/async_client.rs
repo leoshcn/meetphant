@@ -1,4 +1,5 @@
-//! Doubao standard async ASR (submit + query) using `audio.url`.
+//! Doubao Seed-ASR 2.0 recording-file recognition (submit + query) using `audio.url`.
+//! This is the only ASR path: every file is uploaded to TOS first.
 
 use std::time::{Duration, Instant};
 
@@ -7,15 +8,14 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::error::{AppErrorDto, CmdResult};
+use crate::providers::doubao::auth::with_auth;
 use crate::providers::doubao::hotwords::{body_excludes_context_text, build_corpus_context};
 use crate::services::credentials::DoubaoCredentials;
 
-pub const ASYNC_SUBMIT_URL: &str =
-    "https://openspeech.bytedance.com/api/v3/auc/bigmodel/submit";
-pub const ASYNC_QUERY_URL: &str =
-    "https://openspeech.bytedance.com/api/v3/auc/bigmodel/query";
-/// Standard async resource id (not flash turbo, not idle).
-pub const ASYNC_RESOURCE_ID: &str = "volc.bigasr.auc";
+pub const ASYNC_SUBMIT_URL: &str = "https://openspeech.bytedance.com/api/v3/auc/bigmodel/submit";
+pub const ASYNC_QUERY_URL: &str = "https://openspeech.bytedance.com/api/v3/auc/bigmodel/query";
+/// 豆包录音文件识别模型 2.0 (`volc.bigasr.auc` is the legacy 1.0 model).
+pub const ASYNC_RESOURCE_ID: &str = "volc.seedasr.auc";
 
 pub const SUCCESS_STATUS: &str = "20000000";
 pub const QUEUED_STATUS: &str = "20000001";
@@ -64,7 +64,7 @@ struct AsyncResult {
     text: Option<String>,
 }
 
-/// Build submit JSON body. Uses `audio.url`; never includes Meetly `context_text`.
+/// Build submit JSON body. Uses `audio.url`; never includes Meetphant `context_text`.
 pub fn build_async_submit_body(input: &AsyncSubmitInput) -> Value {
     let mut request = json!({
         "model_name": "bigmodel",
@@ -78,7 +78,7 @@ pub fn build_async_submit_body(input: &AsyncSubmitInput) -> Value {
     }
 
     let body = json!({
-        "user": { "uid": "meetly" },
+        "user": { "uid": "meetphant" },
         "audio": {
             "url": input.audio_url,
             "format": input.format,
@@ -88,6 +88,43 @@ pub fn build_async_submit_body(input: &AsyncSubmitInput) -> Value {
 
     debug_assert!(body_excludes_context_text(&body));
     body
+}
+
+pub fn audio_format_from_path(path: &str) -> String {
+    std::path::Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .filter(|e| {
+            matches!(
+                e.as_str(),
+                "wav" | "mp3" | "ogg" | "m4a" | "flac" | "aac" | "wma" | "mp4"
+            )
+        })
+        .unwrap_or_else(|| "mp3".to_string())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProbeVerdict {
+    /// Key authenticated and the 2.0 resource answered (even "task not found").
+    Ok,
+    /// Key rejected or 2.0 resource not granted.
+    AuthFailed,
+    /// Provider-side failure or a response without status headers.
+    Unexpected,
+}
+
+/// Classify a query response for an unknown random request id.
+/// Not in the official docs: HTTP 401/403 are treated as auth failure, `55xxxxxx`
+/// as server error, any other provider status as proof the key works.
+pub fn classify_probe(http_status: u16, status_code: &str) -> ProbeVerdict {
+    if http_status == 401 || http_status == 403 {
+        return ProbeVerdict::AuthFailed;
+    }
+    if status_code.is_empty() || status_code.starts_with("55") || http_status >= 500 {
+        return ProbeVerdict::Unexpected;
+    }
+    ProbeVerdict::Ok
 }
 
 /// Trait so transcription jobs can stub async ASR in tests.
@@ -150,6 +187,33 @@ impl HttpAsyncClient {
             .map_err(|_| AppErrorDto::internal("Failed to create HTTP client"))?;
         Ok(Self { client })
     }
+
+    /// Credential probe for「测试连接」: query a random request id. Needs no TOS
+    /// and no recognition quota; proves the API Key and 2.0 resource access.
+    pub fn probe_auth(&self, credentials: &DoubaoCredentials) -> CmdResult<()> {
+        let response = with_auth(self.client.post(ASYNC_QUERY_URL), credentials)
+            .header("Content-Type", "application/json")
+            .header("X-Api-Resource-Id", ASYNC_RESOURCE_ID)
+            .header("X-Api-Request-Id", Uuid::new_v4().to_string())
+            .json(&json!({}))
+            .send()
+            .map_err(|_| AppErrorDto::asr_provider_error("Failed to reach Doubao ASR"))?;
+
+        let http_status = response.status().as_u16();
+        let status_code = header_str(&response, "X-Api-Status-Code");
+        let api_message = header_str(&response, "X-Api-Message");
+        let _ = response.text();
+
+        match classify_probe(http_status, &status_code) {
+            ProbeVerdict::Ok => Ok(()),
+            ProbeVerdict::AuthFailed => Err(AppErrorDto::asr_provider_error(format!(
+                "豆包 API Key 无效或未开通录音文件识别模型 2.0 ({http_status} {status_code}): {api_message}"
+            ))),
+            ProbeVerdict::Unexpected => Err(AppErrorDto::asr_provider_error(format!(
+                "Doubao ASR probe failed ({http_status} {status_code}): {api_message}"
+            ))),
+        }
+    }
 }
 
 fn header_str(response: &reqwest::blocking::Response, name: &str) -> String {
@@ -170,12 +234,8 @@ impl AsyncRecognizer for HttpAsyncClient {
         let request_id = Uuid::new_v4().to_string();
         let body = build_async_submit_body(input);
 
-        let response = self
-            .client
-            .post(ASYNC_SUBMIT_URL)
+        let response = with_auth(self.client.post(ASYNC_SUBMIT_URL), credentials)
             .header("Content-Type", "application/json")
-            .header("X-Api-App-Key", &credentials.app_id)
-            .header("X-Api-Access-Key", &credentials.access_token)
             .header("X-Api-Resource-Id", ASYNC_RESOURCE_ID)
             .header("X-Api-Request-Id", &request_id)
             .header("X-Api-Sequence", "-1")
@@ -212,12 +272,8 @@ impl AsyncRecognizer for HttpAsyncClient {
         request_id: &str,
         log_id: Option<&str>,
     ) -> CmdResult<AsyncQueryStatus> {
-        let mut req = self
-            .client
-            .post(ASYNC_QUERY_URL)
+        let mut req = with_auth(self.client.post(ASYNC_QUERY_URL), credentials)
             .header("Content-Type", "application/json")
-            .header("X-Api-App-Key", &credentials.app_id)
-            .header("X-Api-Access-Key", &credentials.access_token)
             .header("X-Api-Resource-Id", ASYNC_RESOURCE_ID)
             .header("X-Api-Request-Id", request_id);
 
@@ -237,9 +293,8 @@ impl AsyncRecognizer for HttpAsyncClient {
             .map_err(|_| AppErrorDto::asr_provider_error("Failed to read ASR query response"))?;
 
         if status_code == SUCCESS_STATUS {
-            let parsed: AsyncResponseBody = serde_json::from_str(&raw).map_err(|_| {
-                AppErrorDto::asr_provider_error("Invalid ASR query response JSON")
-            })?;
+            let parsed: AsyncResponseBody = serde_json::from_str(&raw)
+                .map_err(|_| AppErrorDto::asr_provider_error("Invalid ASR query response JSON"))?;
             let text = parsed.result.and_then(|r| r.text).unwrap_or_default();
             return Ok(AsyncQueryStatus::Succeeded {
                 text,
@@ -267,12 +322,12 @@ mod tests {
         let body = build_async_submit_body(&AsyncSubmitInput {
             audio_url: "https://example.test/a.wav".into(),
             format: "wav".into(),
-            hotwords: vec!["Meetly".into()],
+            hotwords: vec!["Meetphant".into()],
         });
         assert_eq!(body["audio"]["url"], "https://example.test/a.wav");
         assert!(body["audio"].get("data").is_none());
         let ctx = body["request"]["corpus"]["context"].as_str().unwrap();
-        assert!(ctx.contains("Meetly"));
+        assert!(ctx.contains("Meetphant"));
         assert!(!body.to_string().contains("context_text"));
         assert_eq!(body["request"]["enable_speaker_info"], true);
         assert_eq!(body["request"]["show_utterances"], true);
@@ -330,8 +385,7 @@ mod tests {
             fail: false,
         };
         let creds = DoubaoCredentials {
-            app_id: "a".into(),
-            access_token: "t".into(),
+            api_key: "k".into(),
         };
         let out = poll_until_done(
             &stub,
@@ -353,8 +407,7 @@ mod tests {
             fail: false,
         };
         let creds = DoubaoCredentials {
-            app_id: "a".into(),
-            access_token: "t".into(),
+            api_key: "k".into(),
         };
         let err = poll_until_done(
             &stub,
@@ -369,11 +422,25 @@ mod tests {
     }
 
     #[test]
-    fn resource_id_is_standard_not_turbo() {
-        assert_eq!(ASYNC_RESOURCE_ID, "volc.bigasr.auc");
-        assert_ne!(
-            ASYNC_RESOURCE_ID,
-            crate::providers::doubao::flash_client::RESOURCE_ID
-        );
+    fn resource_id_is_seed_asr_2() {
+        assert_eq!(ASYNC_RESOURCE_ID, "volc.seedasr.auc");
+    }
+
+    #[test]
+    fn format_from_path() {
+        assert_eq!(audio_format_from_path(r"C:\a\b.WAV"), "wav");
+        assert_eq!(audio_format_from_path("/tmp/x.mp3"), "mp3");
+        assert_eq!(audio_format_from_path("/tmp/x.unknown"), "mp3");
+    }
+
+    #[test]
+    fn probe_classification() {
+        assert_eq!(classify_probe(401, ""), ProbeVerdict::AuthFailed);
+        assert_eq!(classify_probe(403, "45000030"), ProbeVerdict::AuthFailed);
+        assert_eq!(classify_probe(200, "45000001"), ProbeVerdict::Ok);
+        assert_eq!(classify_probe(200, SUCCESS_STATUS), ProbeVerdict::Ok);
+        assert_eq!(classify_probe(200, ""), ProbeVerdict::Unexpected);
+        assert_eq!(classify_probe(200, "55000031"), ProbeVerdict::Unexpected);
+        assert_eq!(classify_probe(502, "20000000"), ProbeVerdict::Unexpected);
     }
 }

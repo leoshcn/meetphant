@@ -34,7 +34,7 @@ src-tauri/src/
 ├── providers/
 │   ├── doubao/
 │   │   ├── mod.rs
-│   │   ├── flash_client.rs
+│   │   ├── auth.rs
 │   │   ├── async_client.rs
 │   │   └── hotwords.rs
 │   ├── tos/
@@ -59,8 +59,8 @@ src-tauri/src/
 ## Module Organization
 
 - **commands/** — IPC edge only.
-- **services/** — validation + persistence + job orchestration (incl. dual-path flash vs TOS+async).
-- **providers/** — Doubao flash/async, TOS object storage, Qwen; no SQLite.
+- **services/** — validation + persistence + job orchestration (incl. TOS upload + Seed-ASR 2.0).
+- **providers/** — Doubao Seed-ASR 2.0 (submit/query + X-Api-Key auth), TOS object storage, Qwen; no SQLite.
 - **db/** — migrations + connection.
 - **models/** — serde DTOs shared across IPC.
 

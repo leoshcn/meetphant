@@ -84,9 +84,7 @@ fn binary_runs(path: &Path) -> bool {
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
-    cmd.status()
-        .map(|s| s.success())
-        .unwrap_or(false)
+    cmd.status().map(|s| s.success()).unwrap_or(false)
 }
 
 /// Prefer managed (app data) download, then installer-bundled sidecar, then PATH.
@@ -110,9 +108,7 @@ pub fn resolve_ffmpeg_path() -> Option<PathBuf> {
 /// (`ffmpeg-<triple>.exe`).
 fn bundled_binary_path() -> Option<PathBuf> {
     let dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
-    bundled_candidates_in(&dir)
-        .into_iter()
-        .find(|p| p.exists())
+    bundled_candidates_in(&dir).into_iter().find(|p| p.exists())
 }
 
 fn bundled_candidates_in(dir: &Path) -> Vec<PathBuf> {
@@ -226,7 +222,7 @@ pub fn start_download(app: Option<AppHandle>) -> CmdResult<FfmpegStatus> {
 
     let app_for_thread = app.clone();
     thread::Builder::new()
-        .name("meetly-ffmpeg-download".into())
+        .name("meetphant-ffmpeg-download".into())
         .spawn(move || {
             emit_progress(&app_for_thread);
             let result = download_and_install(|phase, downloaded, total, message| {
@@ -316,9 +312,10 @@ fn download_and_install_windows(on_progress: &ProgressCb<'_>) -> CmdResult<()> {
         .build()
         .map_err(|_| AppErrorDto::io_error("Could not create HTTP client for FFmpeg download"))?;
 
-    let mut response = client.get(URL).send().map_err(|e| {
-        AppErrorDto::io_error(format!("FFmpeg download request failed: {e}"))
-    })?;
+    let mut response = client
+        .get(URL)
+        .send()
+        .map_err(|e| AppErrorDto::io_error(format!("FFmpeg download request failed: {e}")))?;
     if !response.status().is_success() {
         return Err(AppErrorDto::io_error(format!(
             "FFmpeg download HTTP {}",
@@ -327,29 +324,22 @@ fn download_and_install_windows(on_progress: &ProgressCb<'_>) -> CmdResult<()> {
     }
 
     let total = response.content_length().unwrap_or(0);
-    let mut file = File::create(&archive_path).map_err(|e| {
-        AppErrorDto::io_error(format!("Could not create FFmpeg archive file: {e}"))
-    })?;
+    let mut file = File::create(&archive_path)
+        .map_err(|e| AppErrorDto::io_error(format!("Could not create FFmpeg archive file: {e}")))?;
 
     let mut buf = [0u8; 64 * 1024];
     let mut downloaded = 0u64;
     loop {
-        let n = response.read(&mut buf).map_err(|_| {
-            AppErrorDto::io_error("Failed while reading FFmpeg download stream")
-        })?;
+        let n = response
+            .read(&mut buf)
+            .map_err(|_| AppErrorDto::io_error("Failed while reading FFmpeg download stream"))?;
         if n == 0 {
             break;
         }
-        file.write_all(&buf[..n]).map_err(|_| {
-            AppErrorDto::io_error("Failed while writing FFmpeg archive")
-        })?;
+        file.write_all(&buf[..n])
+            .map_err(|_| AppErrorDto::io_error("Failed while writing FFmpeg archive"))?;
         downloaded = downloaded.saturating_add(n as u64);
-        on_progress(
-            "downloading",
-            downloaded,
-            total,
-            "Downloading FFmpeg…",
-        );
+        on_progress("downloading", downloaded, total, "Downloading FFmpeg…");
     }
     drop(file);
 
@@ -368,12 +358,10 @@ fn download_and_install_windows(on_progress: &ProgressCb<'_>) -> CmdResult<()> {
 
 #[cfg(windows)]
 fn extract_ffmpeg_exe(archive: &Path, dest_dir: &Path) -> CmdResult<()> {
-    let file = File::open(archive).map_err(|_| {
-        AppErrorDto::io_error("Could not open downloaded FFmpeg archive")
-    })?;
-    let mut zip = zip::ZipArchive::new(file).map_err(|_| {
-        AppErrorDto::io_error("Could not read FFmpeg zip archive")
-    })?;
+    let file = File::open(archive)
+        .map_err(|_| AppErrorDto::io_error("Could not open downloaded FFmpeg archive"))?;
+    let mut zip = zip::ZipArchive::new(file)
+        .map_err(|_| AppErrorDto::io_error("Could not read FFmpeg zip archive"))?;
 
     let mut matched_index: Option<usize> = None;
     for i in 0..zip.len() {
@@ -394,16 +382,14 @@ fn extract_ffmpeg_exe(archive: &Path, dest_dir: &Path) -> CmdResult<()> {
         ));
     };
 
-    let mut entry = zip.by_index(index).map_err(|_| {
-        AppErrorDto::io_error("Could not read ffmpeg.exe from archive")
-    })?;
+    let mut entry = zip
+        .by_index(index)
+        .map_err(|_| AppErrorDto::io_error("Could not read ffmpeg.exe from archive"))?;
     let out_path = dest_dir.join("ffmpeg.exe");
-    let mut out = File::create(&out_path).map_err(|e| {
-        AppErrorDto::io_error(format!("Could not write ffmpeg.exe: {e}"))
-    })?;
-    copy(&mut entry, &mut out).map_err(|_| {
-        AppErrorDto::io_error("Failed while extracting ffmpeg.exe")
-    })?;
+    let mut out = File::create(&out_path)
+        .map_err(|e| AppErrorDto::io_error(format!("Could not write ffmpeg.exe: {e}")))?;
+    copy(&mut entry, &mut out)
+        .map_err(|_| AppErrorDto::io_error("Failed while extracting ffmpeg.exe"))?;
     Ok(())
 }
 
@@ -429,10 +415,7 @@ mod tests {
 
     #[test]
     fn init_install_dir_sets_managed_binary_path() {
-        let dir = std::env::temp_dir().join(format!(
-            "meetly-ffmpeg-init-{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("meetphant-ffmpeg-init-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         init_install_dir(dir.clone());

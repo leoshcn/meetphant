@@ -7,7 +7,7 @@ import {
 } from "@tauri-apps/api/window";
 
 export const RECORDER_WIDGET_LABEL = "recorder-widget";
-export const RECORDER_WIDGET_POSITION_KEY = "meetly.recorderWidget.position";
+export const RECORDER_WIDGET_POSITION_KEY = "meetphant.recorderWidget.position";
 
 export const EXPANDED_SIZE = { width: 360, height: 52 } as const;
 export const COLLAPSED_SIZE = { width: 36, height: 36 } as const;

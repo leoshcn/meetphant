@@ -160,7 +160,7 @@ export function RecorderWidget() {
     setCollapsed(next);
   }
 
-  async function openMeetly() {
+  async function openMeetphant() {
     const main = await Window.getByLabel("main");
     if (!main) return;
     try {
@@ -270,9 +270,9 @@ export function RecorderWidget() {
         <button
           type="button"
           className={styles.action}
-          onClick={() => void openMeetly()}
+          onClick={() => void openMeetphant()}
         >
-          打开 Meetly
+          打开 Meetphant
         </button>
         <button
           type="button"

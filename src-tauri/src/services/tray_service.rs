@@ -35,7 +35,7 @@ fn on_quit_requested(app: &AppHandle) {
 
 /// Build a hidden tray icon; shown only while a recording session is active.
 pub fn setup_recording_tray(app: &AppHandle) -> Result<(), String> {
-    let open = MenuItem::with_id(app, "open", "打开 Meetly", true, None::<&str>)
+    let open = MenuItem::with_id(app, "open", "打开 Meetphant", true, None::<&str>)
         .map_err(|e| format!("Failed to create tray open item: {e}"))?;
     let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)
         .map_err(|e| format!("Failed to create tray quit item: {e}"))?;
@@ -50,7 +50,7 @@ pub fn setup_recording_tray(app: &AppHandle) -> Result<(), String> {
     let tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)
         .menu(&menu)
-        .tooltip("Meetly")
+        .tooltip("Meetphant")
         .on_menu_event(|app, event| match event.id().as_ref() {
             "open" => show_main_and_focus(app),
             "quit" => on_quit_requested(app),
@@ -79,9 +79,9 @@ pub fn set_recording_tray_visible(app: &AppHandle, visible: bool) -> Result<(), 
         .tray_by_id(TRAY_ID)
         .ok_or_else(|| "Recording tray is not available".to_string())?;
     if visible {
-        let _ = tray.set_tooltip(Some("Meetly · 正在录音"));
+        let _ = tray.set_tooltip(Some("Meetphant · 正在录音"));
     } else {
-        let _ = tray.set_tooltip(Some("Meetly"));
+        let _ = tray.set_tooltip(Some("Meetphant"));
     }
     tray.set_visible(visible)
         .map_err(|e| format!("Failed to set tray visibility: {e}"))?;

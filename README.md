@@ -1,21 +1,21 @@
-# Meetly
+# Meetphant
 
-**Turn meetings into notes you can act on.**
+**The elephant never forgets.** Turn meetings into notes you can act on.
 
 [中文说明](./README.zh-CN.md)
 
 <p align="center">
-  <img src="docs/screenshots/home.png" alt="Meetly home" width="860" />
+  <img src="docs/screenshots/home.png" alt="Meetphant home" width="860" />
 </p>
 
 A local-first desktop meeting assistant: capture mic + system audio (or import a file), then go from **transcription → structured summary** (key points / action items / decisions).
 
-## Why Meetly
+## Why Meetphant
 
 | | |
 |---|---|
 | **One-click capture** | Mic + system speaker loopback; stop → auto-create meeting & transcribe |
-| **Or import** | Drop in a local file — small files use a fast path; larger ones go async via TOS |
+| **Or import** | Drop in a local file — uploaded to TOS, then transcribed by Doubao Seed-ASR 2.0 |
 | **Notes you can share** | Qwen turns transcripts into key points, action items, and decisions |
 | **Local-first** | Meetings & settings in SQLite; secrets stay in the OS keyring |
 | **Hotwords** | Product names and jargon boost ASR accuracy |
@@ -27,7 +27,7 @@ A local-first desktop meeting assistant: capture mic + system audio (or import a
 ## Features
 
 - **Recording** — WASAPI loopback mix → M4A when FFmpeg is ready, otherwise WAV without blocking
-- **Transcription** — Doubao ASR · flash for ≤20 MiB · TOS + async for larger files (45‑minute poll window)
+- **Transcription** — Doubao Seed-ASR 2.0 (`volc.seedasr.auc`) · every file is uploaded to TOS, then async submit/query (45-minute poll window)
 - **Summary** — DashScope / Qwen `qwen3.7-plus` → key points / action items / decisions
 - **Workspace** — meeting sidebar + split transcript/summary (tabs on narrow windows)
 - **Settings** — credentials, hotwords, summary context, recording folder, FFmpeg status
@@ -49,14 +49,14 @@ npm install
 npm run tauri dev
 ```
 
-Vite serves at `http://localhost:1420` and opens the Meetly window.
+Vite serves at `http://localhost:1420` and opens the Meetphant window.
 
 Configure in **Settings**:
 
 | Role | Provider | What you enter |
 |------|----------|----------------|
-| Transcription | Doubao | App Id + Access Token |
-| Large-file ASR | Volcengine TOS | AK/SK in keyring + region / bucket |
+| Transcription | Doubao | API Key (new speech console) |
+| Audio upload for ASR (required) | Volcengine TOS | AK/SK in keyring + region / bucket |
 | Summary | DashScope / Qwen | API Key |
 
 Secrets live in the OS credential store only — never in SQLite, never returned by `settings_get`.
@@ -75,8 +75,8 @@ Two NSIS installers, same app id (installing one replaces the other):
 
 | Artifact | Contents | When to use |
 |----------|----------|-------------|
-| `Meetly_<ver>_x64-setup.exe` (**lean**, default) | App only | Normal installs; FFmpeg downloads on first need (~80–100 MiB); **in-app updater** uses this channel |
-| `Meetly_<ver>_x64-offline-setup.exe` | App + bundled FFmpeg | Slow / offline networks (manual install only) |
+| `Meetphant_<ver>_x64-setup.exe` (**lean**, default) | App only | Normal installs; FFmpeg downloads on first need (~80–100 MiB); **in-app updater** uses this channel |
+| `Meetphant_<ver>_x64-offline-setup.exe` | App + bundled FFmpeg | Slow / offline networks (manual install only) |
 
 ```bash
 npm run ffmpeg:prepare
@@ -89,12 +89,12 @@ Push a version tag (or run **Actions → Release**) to build and attach both `.e
 
 ### Auto-update (Windows)
 
-- Apps check `https://github.com/leoshcn/meetly/releases/latest/download/latest.json` on launch and from **Settings → About**.
+- Apps check `https://github.com/leoshcn/meetphant/releases/latest/download/latest.json` on launch and from **Settings → About**.
 - Only the **lean** installer is published on the updater channel.
 - Release builds must sign artifacts with a Tauri updater key:
   - Local: set `TAURI_SIGNING_PRIVATE_KEY` or `TAURI_SIGNING_PRIVATE_KEY_PATH` (optional `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`).
   - CI: repository secrets `TAURI_SIGNING_PRIVATE_KEY` and optional `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
-- Generate keys once with `npm run tauri signer generate -- -w ~/.tauri/meetly.key` and keep the **private** key offline; the public key is embedded in `src-tauri/tauri.conf.json`.
+- Generate keys once with `npm run tauri signer generate -- -w ~/.tauri/meetphant.key` and keep the **private** key offline; the public key is embedded in `src-tauri/tauri.conf.json`.
 - Windows **Authenticode** / SmartScreen code signing is still not configured (separate from Tauri update signatures).
 
 Bundled FFmpeg is the Gyan **essentials** build (GPLv3). See [GyanD/codexffmpeg](https://github.com/GyanD/codexffmpeg).
@@ -103,8 +103,7 @@ Bundled FFmpeg is the Gyan **essentials** build (GPLv3). See [GyanD/codexffmpeg]
 
 | Size | Path |
 |------|------|
-| ≤ 20 MiB | Doubao **flash** (`audio.data` base64) |
-| 20 MiB–512 MiB | Upload to TOS → pre-signed GET → Doubao **async** (`volc.bigasr.auc`) |
+| ≤ 512 MiB (≤ 5 h) | Upload to TOS → pre-signed GET → Doubao Seed-ASR 2.0 submit/query (`volc.seedasr.auc`) |
 | > 512 MiB | `ASR_PAYLOAD_TOO_LARGE` |
 
 Hotwords go to ASR. `context_text` is for summaries only — **not** sent to Doubao.

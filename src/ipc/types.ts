@@ -9,7 +9,7 @@ export type Settings = {
   tos_region: string;
   tos_bucket: string;
   tos_endpoint: string;
-  /** User override; empty means default Documents/Meetly/Recordings. */
+  /** User override; empty means default Documents/Meetphant/Recordings. */
   recording_dir: string;
   /** Effective path after resolving the empty-default rule. */
   recording_dir_resolved: string;
@@ -20,10 +20,8 @@ export type Settings = {
 export type SettingsUpdate = {
   hotwords?: string[];
   context_text?: string;
-  /** Write-only; never returned by settings_get. */
-  doubao_app_id?: string;
-  /** Write-only; never returned by settings_get. */
-  doubao_access_token?: string;
+  /** Write-only Doubao new-console API Key; never returned by settings_get. */
+  doubao_api_key?: string;
   /** Write-only DashScope API key; never returned by settings_get. */
   dashscope_api_key?: string;
   /** Write-only TOS Access Key Id; never returned by settings_get. */
@@ -40,8 +38,7 @@ export type SettingsUpdate = {
 
 /** Optional write-only overrides for settings_test_doubao; empty/omit → use keyring. */
 export type SettingsTestDoubaoOverrides = {
-  doubao_app_id?: string;
-  doubao_access_token?: string;
+  doubao_api_key?: string;
 };
 
 /** Optional write-only overrides for settings_test_tos; empty/omit → use keyring/SQLite. */

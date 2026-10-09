@@ -30,7 +30,7 @@ export function SettingsPage({ initialTab = "credentials" }: Props) {
   const [tab, setTab] = useState<SettingsTab>(initialTab);
 
   return (
-    <div className={`${styles.page} meetly-fade-up`}>
+    <div className={`${styles.page} meetphant-fade-up`}>
       <header className={styles.header}>
         <h1>设置</h1>
         <p>

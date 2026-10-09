@@ -12,8 +12,7 @@ pub const CHAT_COMPLETIONS_URL: &str =
     "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
 
 /// DashScope OpenAI-compatible models list (credentials probe).
-pub const MODELS_URL: &str =
-    "https://dashscope.aliyuncs.com/compatible-mode/v1/models";
+pub const MODELS_URL: &str = "https://dashscope.aliyuncs.com/compatible-mode/v1/models";
 
 /// Confirmed model id from DashScope / QwenCloud docs.
 pub const MODEL_ID: &str = "qwen3.7-plus";
@@ -111,24 +110,17 @@ pub fn build_chat_body(input: &SummaryGenerateInput) -> Value {
 pub fn parse_summary_json(content: &str) -> CmdResult<SummaryContent> {
     let trimmed = content.trim();
     let without_fence = strip_json_fence(trimmed);
-    serde_json::from_str::<SummaryContent>(without_fence).map_err(|_| {
-        AppErrorDto::summary_provider_error("Invalid summary JSON from provider")
-    })
+    serde_json::from_str::<SummaryContent>(without_fence)
+        .map_err(|_| AppErrorDto::summary_provider_error("Invalid summary JSON from provider"))
 }
 
 fn strip_json_fence(s: &str) -> &str {
     let s = s.trim();
     if let Some(rest) = s.strip_prefix("```json") {
-        return rest
-            .strip_suffix("```")
-            .unwrap_or(rest)
-            .trim();
+        return rest.strip_suffix("```").unwrap_or(rest).trim();
     }
     if let Some(rest) = s.strip_prefix("```") {
-        return rest
-            .strip_suffix("```")
-            .unwrap_or(rest)
-            .trim();
+        return rest.strip_suffix("```").unwrap_or(rest).trim();
     }
     s
 }
@@ -179,10 +171,7 @@ impl HttpQwenClient {
         let response = self
             .client
             .get(MODELS_URL)
-            .header(
-                "Authorization",
-                format!("Bearer {}", credentials.api_key),
-            )
+            .header("Authorization", format!("Bearer {}", credentials.api_key))
             .send()
             .map_err(|_| AppErrorDto::summary_provider_error("无法连接 DashScope 服务"))?;
 
@@ -218,10 +207,7 @@ impl SummaryGenerator for HttpQwenClient {
             .client
             .post(&self.url)
             .header("Content-Type", "application/json")
-            .header(
-                "Authorization",
-                format!("Bearer {}", credentials.api_key),
-            )
+            .header("Authorization", format!("Bearer {}", credentials.api_key))
             .json(&body)
             .send()
             .map_err(|_| AppErrorDto::summary_provider_error("Failed to reach DashScope"))?;

@@ -44,7 +44,7 @@ export function SettingsAboutPanel() {
 
   return (
     <section className={styles.panel}>
-      <h2>关于 Meetly</h2>
+      <h2>关于 Meetphant</h2>
       <p className={styles.hint}>
         查看当前版本，并从 GitHub Release 检查精简安装包更新。录音或转写进行中时不能安装重启。
       </p>

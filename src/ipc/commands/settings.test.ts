@@ -21,7 +21,7 @@ const emptySettings = {
   tos_bucket: "",
   tos_endpoint: "",
   recording_dir: "",
-  recording_dir_resolved: "C:\\Users\\test\\Documents\\Meetly\\Recordings",
+  recording_dir_resolved: "C:\\Users\\test\\Documents\\Meetphant\\Recordings",
   theme_preference: "system" as const,
 };
 
@@ -33,13 +33,13 @@ describe("settings commands", () => {
   it("settingsGet invokes settings_get", async () => {
     const invoke = vi.fn().mockResolvedValue({
       ...emptySettings,
-      hotwords: ["Meetly"],
+      hotwords: ["Meetphant"],
     });
     __setInvokeForTests(invoke);
 
     const result = await settingsGet();
     expect(invoke).toHaveBeenCalledWith("settings_get", undefined);
-    expect(result.hotwords).toEqual(["Meetly"]);
+    expect(result.hotwords).toEqual(["Meetphant"]);
     expect(result.doubao_configured).toBe(false);
     expect(result.dashscope_configured).toBe(false);
     expect(result.tos_configured).toBe(false);
@@ -48,38 +48,36 @@ describe("settings commands", () => {
   it("settingsUpdate passes SettingsUpdate payload", async () => {
     const invoke = vi.fn().mockResolvedValue({
       ...emptySettings,
-      hotwords: ["Meetly"],
+      hotwords: ["Meetphant"],
       context_text: "ctx",
       doubao_configured: true,
       dashscope_configured: true,
       tos_configured: true,
       tos_region: "cn-beijing",
-      tos_bucket: "meetly",
+      tos_bucket: "meetphant",
     });
     __setInvokeForTests(invoke);
 
     await settingsUpdate({
-      hotwords: ["Meetly"],
+      hotwords: ["Meetphant"],
       context_text: "ctx",
-      doubao_app_id: "app",
-      doubao_access_token: "token",
+      doubao_api_key: "doubao-key",
       dashscope_api_key: "sk-test",
       tos_access_key_id: "ak",
       tos_secret_access_key: "sk",
       tos_region: "cn-beijing",
-      tos_bucket: "meetly",
+      tos_bucket: "meetphant",
     });
     expect(invoke).toHaveBeenCalledWith("settings_update", {
       update: {
-        hotwords: ["Meetly"],
+        hotwords: ["Meetphant"],
         context_text: "ctx",
-        doubao_app_id: "app",
-        doubao_access_token: "token",
+        doubao_api_key: "doubao-key",
         dashscope_api_key: "sk-test",
         tos_access_key_id: "ak",
         tos_secret_access_key: "sk",
         tos_region: "cn-beijing",
-        tos_bucket: "meetly",
+        tos_bucket: "meetphant",
       },
     });
   });
@@ -117,10 +115,9 @@ describe("settings commands", () => {
   it("settingsTestDoubao passes optional overrides", async () => {
     const invoke = vi.fn().mockResolvedValue({ ok: true });
     __setInvokeForTests(invoke);
-    await settingsTestDoubao({ doubao_app_id: "app", doubao_access_token: "tok" });
+    await settingsTestDoubao({ doubao_api_key: "doubao-key" });
     expect(invoke).toHaveBeenCalledWith("settings_test_doubao", {
-      doubao_app_id: "app",
-      doubao_access_token: "tok",
+      doubao_api_key: "doubao-key",
     });
   });
 
@@ -129,8 +126,7 @@ describe("settings commands", () => {
     __setInvokeForTests(invoke);
     await settingsTestDoubao();
     expect(invoke).toHaveBeenCalledWith("settings_test_doubao", {
-      doubao_app_id: undefined,
-      doubao_access_token: undefined,
+      doubao_api_key: undefined,
     });
   });
 

@@ -2635,10 +2635,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "meetly"
+name = "meetphant"
 version = "0.4.0"
 dependencies = [
- "base64 0.22.1",
  "chrono",
  "cpal",
  "dirs 5.0.1",

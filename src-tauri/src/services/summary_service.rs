@@ -2,12 +2,8 @@ use chrono::Utc;
 use rusqlite::Connection;
 
 use crate::error::{AppErrorDto, CmdResult};
-use crate::models::{
-    is_supported_summary_language, Summary,
-};
-use crate::providers::qwen::{
-    HttpQwenClient, SummaryGenerateInput, SummaryGenerator,
-};
+use crate::models::{is_supported_summary_language, Summary};
+use crate::providers::qwen::{HttpQwenClient, SummaryGenerateInput, SummaryGenerator};
 use crate::services::{credentials, meeting_service, settings_service};
 
 fn encode_list(items: &[String]) -> CmdResult<String> {
@@ -180,7 +176,7 @@ mod tests {
     }
 
     fn temp_audio() -> (std::path::PathBuf, String) {
-        let path = std::env::temp_dir().join(format!("meetly-sum-{}.wav", Uuid::new_v4()));
+        let path = std::env::temp_dir().join(format!("meetphant-sum-{}.wav", Uuid::new_v4()));
         let mut f = std::fs::File::create(&path).expect("create");
         f.write_all(b"fake-audio").expect("write");
         let s = path.to_str().unwrap().to_string();
@@ -188,7 +184,7 @@ mod tests {
     }
 
     fn seed_meeting_with_transcript(conn: &Connection) -> (String, std::path::PathBuf) {
-        set_credentials("app", "token").unwrap();
+        set_credentials("doubao-key").unwrap();
         let (path, path_str) = temp_audio();
         let meeting = create_from_file(conn, &path_str).unwrap();
         upsert_transcript(conn, &meeting.id, "会议讨论了发布计划", None).unwrap();
@@ -254,7 +250,7 @@ mod tests {
         reset_for_test();
         set_dashscope_credentials("sk-test").unwrap();
         let conn = open_memory().unwrap();
-        set_credentials("app", "token").unwrap();
+        set_credentials("doubao-key").unwrap();
         let (path, path_str) = temp_audio();
         let meeting = create_from_file(&conn, &path_str).unwrap();
 

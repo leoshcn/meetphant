@@ -80,8 +80,8 @@ function copyArtifact(suffix) {
   const src = latestNsisExe();
   const destName =
     suffix === "offline"
-      ? `Meetly_${version}_x64-offline-setup.exe`
-      : `Meetly_${version}_x64-setup.exe`;
+      ? `Meetphant_${version}_x64-offline-setup.exe`
+      : `Meetphant_${version}_x64-setup.exe`;
   const dest = join(outDir, destName);
   copyFileSync(src.full, dest);
   console.log(`Copied:\n  ${src.full}\n→ ${dest}`);

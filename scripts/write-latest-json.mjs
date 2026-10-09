@@ -14,8 +14,8 @@ const root = resolve(__dirname, "..");
 
 function buildLatestJson(opts) {
   const version = opts.version;
-  const repo = opts.repo || "leoshcn/meetly";
-  const assetName = opts.assetName || `Meetly_${version}_x64-setup.exe`;
+  const repo = opts.repo || "leoshcn/meetphant";
+  const assetName = opts.assetName || `Meetphant_${version}_x64-setup.exe`;
   const tag = version.startsWith("v") ? version : `v${version}`;
   const url = `https://github.com/${repo}/releases/download/${tag}/${assetName}`;
   return {
@@ -35,7 +35,7 @@ function main() {
   const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
   const version = pkg.version || "0.0.0";
   const outDir = join(root, "dist-installers");
-  const exeName = `Meetly_${version}_x64-setup.exe`;
+  const exeName = `Meetphant_${version}_x64-setup.exe`;
   const sigPath = join(outDir, `${exeName}.sig`);
   const exePath = join(outDir, exeName);
 

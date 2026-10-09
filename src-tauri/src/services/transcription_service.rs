@@ -1,7 +1,6 @@
 use std::fs;
 use std::time::Duration;
 
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use chrono::Utc;
 use rusqlite::Connection;
 use uuid::Uuid;
@@ -11,8 +10,8 @@ use crate::models::{
     Job, JOB_KIND_TRANSCRIPTION, JOB_STATUS_FAILED, JOB_STATUS_RUNNING, JOB_STATUS_SUCCEEDED,
 };
 use crate::providers::doubao::{
-    audio_format_from_path, poll_until_done, AsyncRecognizer, AsyncSubmitInput, FlashRecognizeInput,
-    FlashRecognizer, HttpAsyncClient, HttpFlashClient, ASYNC_POLL_INTERVAL, ASYNC_POLL_TIMEOUT,
+    audio_format_from_path, poll_until_done, AsyncRecognizer, AsyncSubmitInput, HttpAsyncClient,
+    ASYNC_POLL_INTERVAL, ASYNC_POLL_TIMEOUT,
 };
 use crate::providers::tos::{
     build_object_key, HttpTosClient, ObjectStorage, TosConfig, PRESIGN_TTL_SECS,
@@ -104,18 +103,6 @@ pub fn mark_job_failed(
     Ok(())
 }
 
-fn read_audio_base64(path: &str) -> CmdResult<String> {
-    let meta = fs::metadata(path).map_err(|_| AppErrorDto::io_error("Cannot read audio file"))?;
-    if meta.len() > meeting_service::FLASH_MAX_AUDIO_BYTES {
-        return Err(AppErrorDto::asr_payload_too_large(
-            meeting_service::FLASH_MAX_AUDIO_BYTES,
-        ));
-    }
-    let bytes = fs::read(path).map_err(|_| AppErrorDto::io_error("Cannot read audio file"))?;
-    // Never log the base64 payload.
-    Ok(BASE64.encode(bytes))
-}
-
 fn load_tos_config(conn: &Connection) -> CmdResult<TosConfig> {
     let settings = settings_service::get_settings(conn)?;
     if !settings.tos_configured {
@@ -135,7 +122,8 @@ pub fn start_transcription_job(conn: &Connection, meeting_id: &str) -> CmdResult
     let _creds = credentials::require_credentials()?;
     let meeting = meeting_service::get_meeting(conn, meeting_id)?;
 
-    // Fail fast on size / TOS before enqueue.
+    // Fail fast on size / TOS before enqueue. Seed-ASR 2.0 only accepts `audio.url`,
+    // so every file goes through TOS regardless of size.
     let meta = fs::metadata(&meeting.source_path)
         .map_err(|_| AppErrorDto::io_error("Cannot read audio file"))?;
     if meta.len() > meeting_service::ASYNC_MAX_AUDIO_BYTES {
@@ -143,9 +131,7 @@ pub fn start_transcription_job(conn: &Connection, meeting_id: &str) -> CmdResult
             meeting_service::ASYNC_MAX_AUDIO_BYTES,
         ));
     }
-    if meta.len() > meeting_service::FLASH_MAX_AUDIO_BYTES
-        && !settings_service::is_tos_configured(conn)
-    {
+    if !settings_service::is_tos_configured(conn) {
         return Err(AppErrorDto::tos_not_configured());
     }
 
@@ -185,24 +171,7 @@ fn load_work_context(conn: &Connection, job_id: &str) -> CmdResult<JobWorkContex
     })
 }
 
-fn run_flash_path(
-    credentials: &credentials::DoubaoCredentials,
-    ctx: &JobWorkContext,
-    recognizer: &dyn FlashRecognizer,
-) -> CmdResult<(String, String)> {
-    let audio_base64 = read_audio_base64(&ctx.source_path)?;
-    let format = audio_format_from_path(&ctx.source_path);
-    let output = recognizer.recognize(
-        credentials,
-        &FlashRecognizeInput {
-            audio_base64,
-            format,
-            hotwords: ctx.hotwords.clone(),
-        },
-    )?;
-    Ok((output.text, output.raw_json))
-}
-
+#[allow(clippy::too_many_arguments)]
 fn run_async_path(
     conn: &Connection,
     job_id: &str,
@@ -247,19 +216,17 @@ fn run_async_path(
     Ok((output.text, output.raw_json))
 }
 
-/// Run recognize for an existing running job (flash or async based on size).
+/// Run recognize for an existing running job (TOS upload + Seed-ASR 2.0).
 #[cfg_attr(not(test), allow(dead_code))]
 pub fn execute_transcription_job(
     conn: &Connection,
     job_id: &str,
-    flash: &dyn FlashRecognizer,
     async_asr: &dyn AsyncRecognizer,
     tos: &dyn ObjectStorage,
 ) -> CmdResult<()> {
     execute_transcription_job_with_poll(
         conn,
         job_id,
-        flash,
         async_asr,
         tos,
         ASYNC_POLL_TIMEOUT,
@@ -270,7 +237,6 @@ pub fn execute_transcription_job(
 fn execute_transcription_job_with_poll(
     conn: &Connection,
     job_id: &str,
-    flash: &dyn FlashRecognizer,
     async_asr: &dyn AsyncRecognizer,
     tos: &dyn ObjectStorage,
     poll_timeout: Duration,
@@ -286,27 +252,18 @@ fn execute_transcription_job_with_poll(
             ));
         }
 
-        let (text, raw_json) = if ctx.file_size > meeting_service::FLASH_MAX_AUDIO_BYTES {
-            run_async_path(
-                conn,
-                job_id,
-                &credentials,
-                &ctx,
-                async_asr,
-                tos,
-                poll_timeout,
-                poll_interval,
-            )?
-        } else {
-            run_flash_path(&credentials, &ctx, flash)?
-        };
-
-        meeting_service::upsert_transcript_from_asr(
+        let (text, raw_json) = run_async_path(
             conn,
-            &ctx.meeting_id,
-            &text,
-            Some(&raw_json),
+            job_id,
+            &credentials,
+            &ctx,
+            async_asr,
+            tos,
+            poll_timeout,
+            poll_interval,
         )?;
+
+        meeting_service::upsert_transcript_from_asr(conn, &ctx.meeting_id, &text, Some(&raw_json))?;
         mark_job_succeeded(conn, job_id)?;
         Ok(())
     })();
@@ -326,15 +283,12 @@ pub fn spawn_transcription_job(app: tauri::AppHandle, job_id: String) {
         let Some(state) = app.try_state::<crate::AppState>() else {
             return;
         };
-        let Ok(flash) = HttpFlashClient::new() else {
-            return;
-        };
         let Ok(async_asr) = HttpAsyncClient::new() else {
             return;
         };
         let tos = HttpTosClient::new();
 
-        let (ctx, tos_config_opt, credentials) = {
+        let (ctx, tos_config, credentials) = {
             let Ok(conn) = state.db.lock() else {
                 return;
             };
@@ -352,75 +306,61 @@ pub fn spawn_transcription_job(app: tauri::AppHandle, job_id: String) {
                     return;
                 }
             };
-            let tos_config_opt = if ctx.file_size > meeting_service::FLASH_MAX_AUDIO_BYTES {
-                match load_tos_config(&conn) {
-                    Ok(c) => Some(c),
-                    Err(err) => {
-                        let _ = mark_job_failed(&conn, &job_id, &err.code, &err.message);
-                        return;
-                    }
+            let tos_config = match load_tos_config(&conn) {
+                Ok(c) => c,
+                Err(err) => {
+                    let _ = mark_job_failed(&conn, &job_id, &err.code, &err.message);
+                    return;
                 }
-            } else {
-                None
             };
-            (ctx, tos_config_opt, credentials)
+            (ctx, tos_config, credentials)
         };
+        let object_key = build_object_key(&ctx.meeting_id, &ctx.source_path);
 
-        let recognize_result = (|| -> CmdResult<(String, String, Option<(TosConfig, String)>)> {
+        // DB lock is not held while uploading / polling.
+        let recognize_result = (|| -> CmdResult<(String, String)> {
             if ctx.file_size > meeting_service::ASYNC_MAX_AUDIO_BYTES {
                 return Err(AppErrorDto::asr_payload_too_large(
                     meeting_service::ASYNC_MAX_AUDIO_BYTES,
                 ));
             }
 
-            if ctx.file_size > meeting_service::FLASH_MAX_AUDIO_BYTES {
-                let tos_config = tos_config_opt.ok_or_else(AppErrorDto::tos_not_configured)?;
-                let object_key = build_object_key(&ctx.meeting_id, &ctx.source_path);
+            tos.put_file(&tos_config, &ctx.source_path, &object_key)?;
+            let audio_url = tos.pre_sign_get(&tos_config, &object_key, PRESIGN_TTL_SECS)?;
+            let format = audio_format_from_path(&ctx.source_path);
+            let submit = async_asr.submit(
+                &credentials,
+                &AsyncSubmitInput {
+                    audio_url,
+                    format,
+                    hotwords: ctx.hotwords.clone(),
+                },
+            )?;
 
-                tos.put_file(&tos_config, &ctx.source_path, &object_key)?;
-                let audio_url = tos.pre_sign_get(&tos_config, &object_key, PRESIGN_TTL_SECS)?;
-                let format = audio_format_from_path(&ctx.source_path);
-                let submit = async_asr.submit(
-                    &credentials,
-                    &AsyncSubmitInput {
-                        audio_url,
-                        format,
-                        hotwords: ctx.hotwords.clone(),
-                    },
-                )?;
-
-                {
-                    let Ok(conn) = state.db.lock() else {
-                        return Err(AppErrorDto::internal("Database lock poisoned"));
-                    };
-                    set_provider_task_id(&conn, &job_id, &submit.request_id)?;
-                }
-
-                let output = poll_until_done(
-                    &async_asr,
-                    &credentials,
-                    &submit.request_id,
-                    submit.log_id.as_deref(),
-                    ASYNC_POLL_TIMEOUT,
-                    ASYNC_POLL_INTERVAL,
-                )?;
-
-                Ok((
-                    output.text,
-                    output.raw_json,
-                    Some((tos_config, object_key)),
-                ))
-            } else {
-                let (text, raw) = run_flash_path(&credentials, &ctx, &flash)?;
-                Ok((text, raw, None))
+            {
+                let Ok(conn) = state.db.lock() else {
+                    return Err(AppErrorDto::internal("Database lock poisoned"));
+                };
+                set_provider_task_id(&conn, &job_id, &submit.request_id)?;
             }
+
+            let output = poll_until_done(
+                &async_asr,
+                &credentials,
+                &submit.request_id,
+                submit.log_id.as_deref(),
+                ASYNC_POLL_TIMEOUT,
+                ASYNC_POLL_INTERVAL,
+            )?;
+
+            Ok((output.text, output.raw_json))
         })();
 
         let Ok(conn) = state.db.lock() else {
             return;
         };
         match recognize_result {
-            Ok((text, raw_json, cleanup)) => {
+            Ok((text, raw_json)) => {
                 if let Err(err) = meeting_service::upsert_transcript_from_asr(
                     &conn,
                     &ctx.meeting_id,
@@ -432,9 +372,8 @@ pub fn spawn_transcription_job(app: tauri::AppHandle, job_id: String) {
                 }
                 let _ = mark_job_succeeded(&conn, &job_id);
                 drop(conn);
-                if let Some((tos_config, object_key)) = cleanup {
-                    let _ = tos.delete_object(&tos_config, &object_key);
-                }
+                // Best-effort delete — must not fail a successful transcript.
+                let _ = tos.delete_object(&tos_config, &object_key);
             }
             Err(err) => {
                 let _ = mark_job_failed(&conn, &job_id, &err.code, &err.message);
@@ -448,12 +387,11 @@ pub fn spawn_transcription_job(app: tauri::AppHandle, job_id: String) {
 pub fn run_transcription_with_recognizers(
     conn: &Connection,
     meeting_id: &str,
-    flash: std::sync::Arc<dyn FlashRecognizer>,
     async_asr: std::sync::Arc<dyn AsyncRecognizer>,
     tos: std::sync::Arc<dyn ObjectStorage>,
 ) -> CmdResult<Job> {
     let job = start_transcription_job(conn, meeting_id)?;
-    execute_transcription_job(conn, &job.id, flash.as_ref(), async_asr.as_ref(), tos.as_ref())?;
+    execute_transcription_job(conn, &job.id, async_asr.as_ref(), tos.as_ref())?;
     get_job(conn, &job.id)
 }
 
@@ -461,7 +399,6 @@ pub fn run_transcription_with_recognizers(
 pub fn run_transcription_with_poll(
     conn: &Connection,
     meeting_id: &str,
-    flash: std::sync::Arc<dyn FlashRecognizer>,
     async_asr: std::sync::Arc<dyn AsyncRecognizer>,
     tos: std::sync::Arc<dyn ObjectStorage>,
     poll_timeout: Duration,
@@ -471,7 +408,6 @@ pub fn run_transcription_with_poll(
     execute_transcription_job_with_poll(
         conn,
         &job.id,
-        flash.as_ref(),
         async_asr.as_ref(),
         tos.as_ref(),
         poll_timeout,
@@ -485,37 +421,21 @@ mod tests {
     use super::*;
     use crate::db::pool::open_memory;
     use crate::models::SettingsUpdate;
-    use crate::providers::doubao::{AsyncQueryStatus, AsyncSubmitOutput, FlashRecognizeOutput};
+    use crate::providers::doubao::{AsyncQueryStatus, AsyncSubmitOutput};
     use crate::services::credentials::{reset_for_test, set_credentials, set_tos_credentials};
     use crate::services::meeting_service::create_from_file;
     use std::io::Write;
     use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
 
-    struct StubFlash {
-        result: Mutex<Result<FlashRecognizeOutput, AppErrorDto>>,
-    }
-
-    impl FlashRecognizer for StubFlash {
-        fn recognize(
-            &self,
-            _credentials: &credentials::DoubaoCredentials,
-            input: &FlashRecognizeInput,
-        ) -> CmdResult<FlashRecognizeOutput> {
-            assert!(!input.audio_base64.is_empty());
-            let body = crate::providers::doubao::build_flash_body(input);
-            assert!(!body.to_string().contains("context_text"));
-            match &*self.result.lock().unwrap() {
-                Ok(out) => Ok(out.clone()),
-                Err(err) => Err(err.clone()),
-            }
-        }
-    }
+    /// Larger than the removed 20 MiB flash threshold; still goes through the same path.
+    const LARGE_AUDIO_BYTES: u64 = 20 * 1024 * 1024 + 1;
 
     struct StubAsync {
         queries_before_success: usize,
         calls: AtomicUsize,
         always_progress: bool,
+        fail: bool,
     }
 
     impl AsyncRecognizer for StubAsync {
@@ -525,6 +445,8 @@ mod tests {
             input: &AsyncSubmitInput,
         ) -> CmdResult<AsyncSubmitOutput> {
             assert!(!input.audio_url.is_empty());
+            let body = crate::providers::doubao::async_client::build_async_submit_body(input);
+            assert!(!body.to_string().contains("context_text"));
             Ok(AsyncSubmitOutput {
                 request_id: "async-task-1".into(),
                 log_id: None,
@@ -537,14 +459,19 @@ mod tests {
             _request_id: &str,
             _log_id: Option<&str>,
         ) -> CmdResult<AsyncQueryStatus> {
+            if self.fail {
+                return Ok(AsyncQueryStatus::Failed {
+                    message: "boom".into(),
+                });
+            }
             if self.always_progress {
                 return Ok(AsyncQueryStatus::InProgress);
             }
             let n = self.calls.fetch_add(1, Ordering::SeqCst);
             if n + 1 >= self.queries_before_success {
                 Ok(AsyncQueryStatus::Succeeded {
-                    text: "large file transcript".into(),
-                    raw_json: r#"{"result":{"text":"large file transcript"}}"#.into(),
+                    text: "seed asr transcript".into(),
+                    raw_json: r#"{"result":{"text":"seed asr transcript"}}"#.into(),
                 })
             } else {
                 Ok(AsyncQueryStatus::InProgress)
@@ -589,7 +516,7 @@ mod tests {
     }
 
     fn temp_audio() -> (std::path::PathBuf, String) {
-        let path = std::env::temp_dir().join(format!("meetly-asr-{}.wav", Uuid::new_v4()));
+        let path = std::env::temp_dir().join(format!("meetphant-asr-{}.wav", Uuid::new_v4()));
         let mut f = fs::File::create(&path).expect("create");
         f.write_all(b"fake-audio").expect("write");
         let s = path.to_str().unwrap().to_string();
@@ -597,7 +524,7 @@ mod tests {
     }
 
     fn large_temp_audio(size: u64) -> (std::path::PathBuf, String) {
-        let path = std::env::temp_dir().join(format!("meetly-large-{}.wav", Uuid::new_v4()));
+        let path = std::env::temp_dir().join(format!("meetphant-large-{}.wav", Uuid::new_v4()));
         {
             let f = fs::File::create(&path).expect("create");
             f.set_len(size).expect("size");
@@ -612,20 +539,11 @@ mod tests {
             conn,
             SettingsUpdate {
                 tos_region: Some("cn-beijing".into()),
-                tos_bucket: Some("meetly-bucket".into()),
+                tos_bucket: Some("meetphant-bucket".into()),
                 ..Default::default()
             },
         )
         .unwrap();
-    }
-
-    fn flash_ok() -> Arc<StubFlash> {
-        Arc::new(StubFlash {
-            result: Mutex::new(Ok(FlashRecognizeOutput {
-                text: "hello meeting".into(),
-                raw_json: r#"{"result":{"text":"hello meeting"}}"#.into(),
-            })),
-        })
     }
 
     fn async_ok() -> Arc<StubAsync> {
@@ -633,6 +551,7 @@ mod tests {
             queries_before_success: 1,
             calls: AtomicUsize::new(0),
             always_progress: false,
+            fail: false,
         })
     }
 
@@ -645,37 +564,42 @@ mod tests {
     }
 
     #[test]
-    fn job_transitions_succeeded_with_stub() {
+    fn small_file_goes_through_tos_and_seed_asr() {
         reset_for_test();
-        set_credentials("app", "token").unwrap();
+        set_credentials("doubao-key").unwrap();
         let conn = open_memory().unwrap();
+        configure_tos(&conn);
         let (path, path_str) = temp_audio();
         let meeting = create_from_file(&conn, &path_str).unwrap();
 
-        let job =
-            run_transcription_with_recognizers(&conn, &meeting.id, flash_ok(), async_ok(), tos_ok())
-                .unwrap();
+        let tos = tos_ok();
+        let job = run_transcription_with_recognizers(&conn, &meeting.id, async_ok(), tos.clone())
+            .unwrap();
         assert_eq!(job.status, JOB_STATUS_SUCCEEDED);
+        assert_eq!(tos.put_calls.load(Ordering::SeqCst), 1);
         let transcript = meeting_service::get_transcript(&conn, &meeting.id).unwrap();
-        assert_eq!(transcript.text, "hello meeting");
+        assert_eq!(transcript.text, "seed asr transcript");
         let _ = fs::remove_file(path);
     }
 
     #[test]
     fn job_transitions_failed_on_provider_error() {
         reset_for_test();
-        set_credentials("app", "token").unwrap();
+        set_credentials("doubao-key").unwrap();
         let conn = open_memory().unwrap();
+        configure_tos(&conn);
         let (path, path_str) = temp_audio();
         let meeting = create_from_file(&conn, &path_str).unwrap();
 
-        let stub = Arc::new(StubFlash {
-            result: Mutex::new(Err(AppErrorDto::asr_provider_error("boom"))),
+        let stub = Arc::new(StubAsync {
+            queries_before_success: 1,
+            calls: AtomicUsize::new(0),
+            always_progress: false,
+            fail: true,
         });
 
-        let err =
-            run_transcription_with_recognizers(&conn, &meeting.id, stub, async_ok(), tos_ok())
-                .expect_err("fail");
+        let err = run_transcription_with_recognizers(&conn, &meeting.id, stub, tos_ok())
+            .expect_err("fail");
         assert_eq!(err.code, "ASR_PROVIDER_ERROR");
 
         let jobs: Vec<String> = {
@@ -709,9 +633,9 @@ mod tests {
     #[test]
     fn start_rejects_over_async_cap() {
         reset_for_test();
-        set_credentials("app", "token").unwrap();
+        set_credentials("doubao-key").unwrap();
         let conn = open_memory().unwrap();
-        let path = std::env::temp_dir().join(format!("meetly-oversize-{}.wav", Uuid::new_v4()));
+        let path = std::env::temp_dir().join(format!("meetphant-oversize-{}.wav", Uuid::new_v4()));
         {
             let f = fs::File::create(&path).expect("create");
             f.set_len(meeting_service::ASYNC_MAX_AUDIO_BYTES + 1)
@@ -720,11 +644,7 @@ mod tests {
         let meeting_id = Uuid::new_v4().to_string();
         conn.execute(
             "INSERT INTO meetings (id, source_path, title, created_at) VALUES (?1, ?2, NULL, ?3)",
-            rusqlite::params![
-                meeting_id,
-                path.to_str().unwrap(),
-                Utc::now().to_rfc3339()
-            ],
+            rusqlite::params![meeting_id, path.to_str().unwrap(), Utc::now().to_rfc3339()],
         )
         .unwrap();
         let err = start_transcription_job(&conn, &meeting_id).expect_err("too big");
@@ -733,11 +653,12 @@ mod tests {
     }
 
     #[test]
-    fn large_file_without_tos_errors() {
+    fn small_file_without_tos_errors() {
         reset_for_test();
-        set_credentials("app", "token").unwrap();
+        set_credentials("doubao-key").unwrap();
         let conn = open_memory().unwrap();
-        let (path, path_str) = large_temp_audio(meeting_service::FLASH_MAX_AUDIO_BYTES + 1);
+        assert!(!settings_service::is_tos_configured(&conn));
+        let (path, path_str) = temp_audio();
         let meeting = create_from_file(&conn, &path_str).unwrap();
         let err = start_transcription_job(&conn, &meeting.id).expect_err("no tos");
         assert_eq!(err.code, "TOS_NOT_CONFIGURED");
@@ -745,23 +666,29 @@ mod tests {
     }
 
     #[test]
-    fn async_path_succeeds_with_stubs() {
+    fn large_file_without_tos_errors() {
         reset_for_test();
-        set_credentials("app", "token").unwrap();
+        set_credentials("doubao-key").unwrap();
+        let conn = open_memory().unwrap();
+        let (path, path_str) = large_temp_audio(LARGE_AUDIO_BYTES);
+        let meeting = create_from_file(&conn, &path_str).unwrap();
+        let err = start_transcription_job(&conn, &meeting.id).expect_err("no tos");
+        assert_eq!(err.code, "TOS_NOT_CONFIGURED");
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn large_file_succeeds_with_stubs() {
+        reset_for_test();
+        set_credentials("doubao-key").unwrap();
         let conn = open_memory().unwrap();
         configure_tos(&conn);
-        let (path, path_str) = large_temp_audio(meeting_service::FLASH_MAX_AUDIO_BYTES + 1);
+        let (path, path_str) = large_temp_audio(LARGE_AUDIO_BYTES);
         let meeting = create_from_file(&conn, &path_str).unwrap();
 
         let tos = tos_ok();
-        let job = run_transcription_with_recognizers(
-            &conn,
-            &meeting.id,
-            flash_ok(),
-            async_ok(),
-            tos.clone(),
-        )
-        .unwrap();
+        let job = run_transcription_with_recognizers(&conn, &meeting.id, async_ok(), tos.clone())
+            .unwrap();
         assert_eq!(job.status, JOB_STATUS_SUCCEEDED);
         assert_eq!(tos.put_calls.load(Ordering::SeqCst), 1);
         assert_eq!(tos.delete_calls.load(Ordering::SeqCst), 1);
@@ -776,17 +703,17 @@ mod tests {
         assert_eq!(task_id.as_deref(), Some("async-task-1"));
 
         let transcript = meeting_service::get_transcript(&conn, &meeting.id).unwrap();
-        assert_eq!(transcript.text, "large file transcript");
+        assert_eq!(transcript.text, "seed asr transcript");
         let _ = fs::remove_file(path);
     }
 
     #[test]
     fn async_delete_failure_does_not_fail_job() {
         reset_for_test();
-        set_credentials("app", "token").unwrap();
+        set_credentials("doubao-key").unwrap();
         let conn = open_memory().unwrap();
         configure_tos(&conn);
-        let (path, path_str) = large_temp_audio(meeting_service::FLASH_MAX_AUDIO_BYTES + 1);
+        let (path, path_str) = large_temp_audio(LARGE_AUDIO_BYTES);
         let meeting = create_from_file(&conn, &path_str).unwrap();
 
         let tos = Arc::new(StubTos {
@@ -794,9 +721,7 @@ mod tests {
             delete_calls: AtomicUsize::new(0),
             delete_fails: true,
         });
-        let job =
-            run_transcription_with_recognizers(&conn, &meeting.id, flash_ok(), async_ok(), tos)
-                .unwrap();
+        let job = run_transcription_with_recognizers(&conn, &meeting.id, async_ok(), tos).unwrap();
         assert_eq!(job.status, JOB_STATUS_SUCCEEDED);
         let _ = fs::remove_file(path);
     }
@@ -804,22 +729,22 @@ mod tests {
     #[test]
     fn async_poll_timeout_marks_failed() {
         reset_for_test();
-        set_credentials("app", "token").unwrap();
+        set_credentials("doubao-key").unwrap();
         let conn = open_memory().unwrap();
         configure_tos(&conn);
-        let (path, path_str) = large_temp_audio(meeting_service::FLASH_MAX_AUDIO_BYTES + 1);
+        let (path, path_str) = large_temp_audio(LARGE_AUDIO_BYTES);
         let meeting = create_from_file(&conn, &path_str).unwrap();
 
         let async_asr = Arc::new(StubAsync {
             queries_before_success: 1000,
             calls: AtomicUsize::new(0),
             always_progress: true,
+            fail: false,
         });
 
         let err = run_transcription_with_poll(
             &conn,
             &meeting.id,
-            flash_ok(),
             async_asr,
             tos_ok(),
             Duration::from_millis(30),
@@ -838,26 +763,9 @@ mod tests {
         assert_eq!(status, JOB_STATUS_FAILED);
         assert_eq!(error_code.as_deref(), Some("ASR_TIMEOUT"));
         assert!(
-            error_message
-                .as_ref()
-                .is_some_and(|m| !m.trim().is_empty()),
+            error_message.as_ref().is_some_and(|m| !m.trim().is_empty()),
             "failed job must persist a non-empty error_message"
         );
-        let _ = fs::remove_file(path);
-    }
-
-    #[test]
-    fn flash_path_works_without_tos() {
-        reset_for_test();
-        set_credentials("app", "token").unwrap();
-        let conn = open_memory().unwrap();
-        assert!(!settings_service::is_tos_configured(&conn));
-        let (path, path_str) = temp_audio();
-        let meeting = create_from_file(&conn, &path_str).unwrap();
-        let job =
-            run_transcription_with_recognizers(&conn, &meeting.id, flash_ok(), async_ok(), tos_ok())
-                .unwrap();
-        assert_eq!(job.status, JOB_STATUS_SUCCEEDED);
         let _ = fs::remove_file(path);
     }
 }

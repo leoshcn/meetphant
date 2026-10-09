@@ -18,10 +18,7 @@ pub fn meetings_create(state: State<'_, AppState>) -> CmdResult<Meeting> {
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub fn meetings_create_from_file(
-    state: State<'_, AppState>,
-    path: String,
-) -> CmdResult<Meeting> {
+pub fn meetings_create_from_file(state: State<'_, AppState>, path: String) -> CmdResult<Meeting> {
     let conn = state
         .db
         .lock()
@@ -52,10 +49,7 @@ pub fn meetings_list(state: State<'_, AppState>) -> CmdResult<Vec<Meeting>> {
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub fn meetings_get(
-    state: State<'_, AppState>,
-    meeting_id: String,
-) -> CmdResult<Meeting> {
+pub fn meetings_get(state: State<'_, AppState>, meeting_id: String) -> CmdResult<Meeting> {
     let conn = state
         .db
         .lock()

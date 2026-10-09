@@ -38,7 +38,7 @@ Helpers: `settings_invalid`, `invalid_argument`, `db_error`, `internal`, `not_fo
 2. `message` is user-safe; never tokens, base64 audio, pre-signed URL query strings with signatures at info logs, or absolute secret paths.
 3. `From<rusqlite::Error>` / `From<serde_json::Error>` → `DB_ERROR` with **fixed** messages (do not forward Display).
 4. Frontend normalizes unknown rejects to `{ code: "INTERNAL", message: "Unexpected error" }`.
-5. Transcription jobs persist terminal failures as `status=failed` with non-empty `error_code` / `error_message` for UI polling (covers flash provider errors, TOS upload failures, async provider failures, and `ASR_TIMEOUT`).
+5. Transcription jobs persist terminal failures as `status=failed` with non-empty `error_code` / `error_message` for UI polling (covers TOS upload failures, Seed-ASR submit/query failures, and `ASR_TIMEOUT`).
 6. Summary generation failures return typed codes; do not persist partial summary on parse/API failure.
 7. Best-effort TOS object delete after successful transcript must **not** flip the job to failed.
 
@@ -52,10 +52,10 @@ Helpers: `settings_invalid`, `invalid_argument`, `db_error`, `internal`, `not_fo
 | SQLite | `DB_ERROR` | Toast |
 | Missing ASR credentials | `ASR_NOT_CONFIGURED` | Prompt to settings |
 | File too large (> 512 MiB) | `ASR_PAYLOAD_TOO_LARGE` | Inline / job error |
-| Large file (> 20 MiB) without TOS | `TOS_NOT_CONFIGURED` | Prompt to configure TOS |
+| Any file without TOS | `TOS_NOT_CONFIGURED` | Prompt to configure TOS |
 | TOS put / pre-sign failure | `TOS_UPLOAD_ERROR` | Job error |
 | File read failure | `IO_ERROR` | Inline / job error |
-| Doubao API failure (flash or async) | `ASR_PROVIDER_ERROR` | Job error |
+| Doubao API failure (submit / query / test probe) | `ASR_PROVIDER_ERROR` | Job error |
 | Async poll > 45 minutes | `ASR_TIMEOUT` | Job error |
 | Transcript not ready for summary | `SUMMARY_NOT_READY` | Inline / prompt to finish ASR |
 | Missing DashScope key | `SUMMARY_NOT_CONFIGURED` | Prompt to settings |

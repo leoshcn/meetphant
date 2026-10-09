@@ -343,8 +343,8 @@ export function HomePage({
         <div
           className={
             showWorkspace
-              ? `${wideWorkspace ? styles.split : styles.tabsLayout} meetly-fade-up`
-              : `${styles.emptyStage} meetly-fade-up`
+              ? `${wideWorkspace ? styles.split : styles.tabsLayout} meetphant-fade-up`
+              : `${styles.emptyStage} meetphant-fade-up`
           }
         >
           {workspaceBody}

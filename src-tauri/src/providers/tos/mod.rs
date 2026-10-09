@@ -58,7 +58,7 @@ impl TosConfig {
     }
 }
 
-/// Build object key: `meetly/{meeting_id}/{uuid}{ext}`.
+/// Build object key: `meetphant/{meeting_id}/{uuid}{ext}`.
 pub fn build_object_key(meeting_id: &str, source_path: &str) -> String {
     let ext = Path::new(source_path)
         .extension()
@@ -66,7 +66,7 @@ pub fn build_object_key(meeting_id: &str, source_path: &str) -> String {
         .map(|e| format!(".{}", e.to_ascii_lowercase()))
         .unwrap_or_default();
     let id = uuid::Uuid::new_v4();
-    format!("meetly/{meeting_id}/{id}{ext}")
+    format!("meetphant/{meeting_id}/{id}{ext}")
 }
 
 /// Trait so transcription jobs can stub TOS in tests.
@@ -236,7 +236,7 @@ mod tests {
     #[test]
     fn object_key_includes_meeting_and_ext() {
         let key = build_object_key("meet-1", r"C:\audio\demo.WAV");
-        assert!(key.starts_with("meetly/meet-1/"));
+        assert!(key.starts_with("meetphant/meet-1/"));
         assert!(key.ends_with(".wav"));
     }
 
@@ -255,12 +255,13 @@ mod tests {
             "bucket",
             "",
         );
-        stub.put_file(&config, "/tmp/a.wav", "meetly/m/x.wav")
+        stub.put_file(&config, "/tmp/a.wav", "meetphant/m/x.wav")
             .unwrap();
-        let url = stub.pre_sign_get(&config, "meetly/m/x.wav", PRESIGN_TTL_SECS)
+        let url = stub
+            .pre_sign_get(&config, "meetphant/m/x.wav", PRESIGN_TTL_SECS)
             .unwrap();
-        assert!(url.contains("meetly/m/x.wav"));
-        stub.delete_object(&config, "meetly/m/x.wav").unwrap();
+        assert!(url.contains("meetphant/m/x.wav"));
+        stub.delete_object(&config, "meetphant/m/x.wav").unwrap();
         assert_eq!(stub.deleted.lock().unwrap().len(), 1);
     }
 }

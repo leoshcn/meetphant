@@ -119,24 +119,15 @@ impl AppErrorDto {
     }
 
     pub fn record_no_device() -> Self {
-        Self::new(
-            "RECORD_NO_DEVICE",
-            "No audio input device is available",
-        )
+        Self::new("RECORD_NO_DEVICE", "No audio input device is available")
     }
 
     pub fn record_busy() -> Self {
-        Self::new(
-            "RECORD_BUSY",
-            "A recording is already in progress",
-        )
+        Self::new("RECORD_BUSY", "A recording is already in progress")
     }
 
     pub fn record_not_active() -> Self {
-        Self::new(
-            "RECORD_NOT_ACTIVE",
-            "No recording is in progress",
-        )
+        Self::new("RECORD_NOT_ACTIVE", "No recording is in progress")
     }
 
     pub fn record_device_error(message: impl Into<String>) -> Self {

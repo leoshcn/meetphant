@@ -77,9 +77,9 @@ function CloseRecordingDialog({
 
   const description =
     phase.kind === "choices"
-      ? "关闭 Meetly 前请选择如何处理当前录音。停止并保存只会落盘音频，不会自动创建会议或开始转写；下次可用「导入音频并转写」处理该文件。"
+      ? "关闭 Meetphant 前请选择如何处理当前录音。停止并保存只会落盘音频，不会自动创建会议或开始转写；下次可用「导入音频并转写」处理该文件。"
       : phase.kind === "saved"
-        ? `音频已保存到：\n${phase.path}\n\n不会自动创建会议或开始转写。下次打开 Meetly 后，可用「导入音频并转写」处理该文件。`
+        ? `音频已保存到：\n${phase.path}\n\n不会自动创建会议或开始转写。下次打开 Meetphant 后，可用「导入音频并转写」处理该文件。`
         : phase.message;
 
   return (
@@ -234,7 +234,7 @@ function AppShellChrome({
           className="brand"
           onClick={() => setScreen("home")}
         >
-          Meetly
+          Meetphant
           {screen === "home" && titleSuffix ? (
             <span className="brand-meta">· {titleSuffix}</span>
           ) : null}

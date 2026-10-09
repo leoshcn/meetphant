@@ -2,7 +2,7 @@ import type { ThemePreference } from "../../ipc";
 
 export type ResolvedTheme = "light" | "dark";
 
-const CACHE_KEY = "meetly.theme_preference";
+const CACHE_KEY = "meetphant.theme_preference";
 
 export function parseThemePreference(raw: unknown): ThemePreference {
   if (raw === "light" || raw === "dark" || raw === "system") return raw;
