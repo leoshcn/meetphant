@@ -121,6 +121,18 @@ src/          React UI (app / pages / features / ipc / shared)
 src-tauri/    Tauri commands, services, SQLite, providers
 ```
 
+## Website
+
+The product site lives in `website/` (static HTML/CSS, no build step; Chinese at `/`, English at `/en/`).
+
+```bash
+py -3 -m http.server -d website 8000   # or: npx serve website — then open http://localhost:8000
+npm run screenshots                    # re-render website/assets/screenshots/*.png and og.png
+```
+
+`npm run screenshots` renders the real React UI in headless Chromium with mocked Tauri IPC and sample data (`scripts/screenshots/`); re-run it after UI changes and commit the images.
+Pushes to `main` that touch `website/**` deploy via `.github/workflows/pages.yml`. **One-time setup:** repo **Settings → Pages → Source = GitHub Actions**.
+
 ## Stack
 
 Tauri 2 · React 19 · TypeScript · Vite · SQLite · Doubao ASR · Qwen · OS keyring

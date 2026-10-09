@@ -119,6 +119,18 @@ src/          React UI（app / pages / features / ipc / shared）
 src-tauri/    Tauri 命令、服务、SQLite、供应商适配
 ```
 
+## 官网
+
+产品官网位于 `website/`（纯 HTML/CSS，无构建步骤；中文 `/`，英文 `/en/`）。
+
+```bash
+py -3 -m http.server -d website 8000   # 或 npx serve website，然后打开 http://localhost:8000
+npm run screenshots                    # 重新生成 website/assets/screenshots/*.png 与 og.png
+```
+
+`npm run screenshots` 用无头 Chromium + 模拟的 Tauri IPC 与示例数据渲染真实 React 界面（`scripts/screenshots/`）；界面改动后请重跑并提交截图。
+推送到 `main` 且改动 `website/**` 时由 `.github/workflows/pages.yml` 自动发布。**首次需手动开启：** 仓库 **Settings → Pages → Source 选 GitHub Actions**。
+
 ## 技术栈
 
 Tauri 2 · React 19 · TypeScript · Vite · SQLite · 豆包语音 · 通义千问 · 系统钥匙串

@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Meetphant 会议助手 — 把会议录音变成可带走的纪要</title>
+    <meta
+      name="description"
+      content="Meetphant 会议助手：Windows 桌面会议录音与纪要工具。同时录制麦克风与系统声音，不受会议平台限制；自定义热词让转写更准；摘要可连接本地大模型，生成要点、待办与决策。"
+    />
+    <meta name="theme-color" content="#111A20" />
+    <link rel="icon" type="image/svg+xml" href="assets/meetphant-icon.svg" />
+    <link rel="canonical" href="https://leoshcn.github.io/meetphant/" />
+    <link rel="alternate" hreflang="zh-CN" href="https://leoshcn.github.io/meetphant/" />
+    <link rel="alternate" hreflang="en" href="https://leoshcn.github.io/meetphant/en/" />
+    <link rel="alternate" hreflang="x-default" href="https://leoshcn.github.io/meetphant/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Meetphant" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:locale:alternate" content="en_US" />
+    <meta property="og:title" content="Meetphant 会议助手 — 把会议录音变成可带走的纪要" />
+    <meta
+      property="og:description"
+      content="独立录制麦克风与系统声音，自定义热词提升转写准确度，摘要可连接本地大模型。"
+    />
+    <meta property="og:url" content="https://leoshcn.github.io/meetphant/" />
+    <meta property="og:image" content="https://leoshcn.github.io/meetphant/assets/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://leoshcn.github.io/meetphant/assets/og.png" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Syne:wght@700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="assets/style.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳到正文</a>
+
+    <header class="site-header">
+      <div class="container">
+        <a class="brand" href="./" aria-label="Meetphant 首页">
+          <img src="assets/meetphant-logo.svg" alt="Meetphant" width="460" height="112" />
+        </a>
+        <div class="header-actions">
+          <nav class="lang-switch" aria-label="语言">
+            <span aria-current="page" lang="zh-CN">中文</span>
+            <a href="en/" hreflang="en" lang="en">EN</a>
+          </nav>
+          <a class="btn btn-primary btn-sm" href="https://github.com/leoshcn/meetphant/releases/latest">
+            下载<span class="label-long">&nbsp;Windows 版</span>
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="container">
+          <p class="eyebrow"><span class="dot" aria-hidden="true"></span>Windows 桌面会议助手</p>
+          <h1>Meetphant <span class="cjk">会议助手</span></h1>
+          <p class="slogan">
+            <strong>大象从不遗忘。</strong>把会议录音变成可带走的纪要——录制或导入音频，自动转写，整理出要点、待办与决策。
+          </p>
+          <div class="hero-cta">
+            <a class="btn btn-primary" href="https://github.com/leoshcn/meetphant/releases/latest">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              下载 Windows 版
+            </a>
+            <a class="btn btn-ghost" href="#features">了解功能</a>
+          </div>
+          <p class="hero-note">支持 Windows 10 / 11</p>
+
+          <div class="hero-shot">
+            <figure class="window">
+              <div class="window-bar" aria-hidden="true"><i></i><i></i><i></i></div>
+              <picture>
+                <source
+                  media="(max-width: 640px)"
+                  srcset="assets/screenshots/workspace-mobile.png"
+                  width="1134"
+                  height="1359"
+                />
+                <img
+                  src="assets/screenshots/workspace.png"
+                  width="1280"
+                  height="800"
+                  alt="Meetphant 工作区：左侧会议列表，中间为带发言人的转写全文，右侧为要点、待办与决策摘要"
+                  fetchpriority="high"
+                />
+              </picture>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="features" aria-labelledby="features-title">
+        <div class="container">
+          <div class="section-head">
+            <p class="kicker">Features</p>
+            <h2 id="features-title">开会只管说，纪要交给大象</h2>
+            <p>从录音到可分享的纪要，Meetphant 把每一步都做得简单、可控。</p>
+          </div>
+
+          <div class="features">
+            <article class="feature">
+              <div class="feature-copy">
+                <span class="feature-index"><b>01</b> / 03</span>
+                <h3><span class="nb">独立录制，</span><span class="nb">不被会议平台绑定</span></h3>
+                <p class="lead">
+                  同时录制麦克风与系统声音。腾讯会议、飞书、Zoom、Teams，还是线下会议室，都能一键开录。
+                </p>
+                <ul class="points">
+                  <li>麦克风与系统声音双轨电平实时可见，录没录上一眼便知</li>
+                  <li>不依赖任何会议软件的插件、机器人或会议权限</li>
+                  <li>已有录音？直接导入 wav、mp3、m4a 等本地音频</li>
+                </ul>
+              </div>
+              <figure class="window">
+                <div class="window-bar" aria-hidden="true"><i></i><i></i><i></i></div>
+                <picture>
+                  <source
+                    media="(max-width: 640px)"
+                    srcset="assets/screenshots/recording-mobile.png"
+                    width="1134"
+                    height="1209"
+                  />
+                  <img
+                    src="assets/screenshots/recording.png"
+                    width="1280"
+                    height="800"
+                    loading="lazy"
+                    alt="录音中界面：计时器、麦克风与系统声音双轨波形，以及正在使用的录音设备"
+                  />
+                </picture>
+              </figure>
+            </article>
+
+            <article class="feature">
+              <div class="feature-copy">
+                <span class="feature-index"><b>02</b> / 03</span>
+                <h3><span class="nb">自定义热词，</span><span class="nb">越用越懂你</span></h3>
+                <p class="lead">
+                  把专有名词、人名、产品名加入热词表，转写时随请求一并提交给识别引擎，结果更准。
+                </p>
+                <ul class="points">
+                  <li>同事姓名、客户名称、项目代号，一次添加长期生效</li>
+                  <li>热词只作用于转写；摘要另有「上下文」设置提供背景信息</li>
+                  <li>发言人可重命名，纪要里直接显示真实称呼</li>
+                </ul>
+              </div>
+              <figure class="window">
+                <div class="window-bar" aria-hidden="true"><i></i><i></i><i></i></div>
+                <picture>
+                  <source
+                    media="(max-width: 640px)"
+                    srcset="assets/screenshots/hotwords-mobile.png"
+                    width="1101"
+                    height="1413"
+                  />
+                  <img
+                    src="assets/screenshots/hotwords.png"
+                    width="1280"
+                    height="800"
+                    loading="lazy"
+                    alt="热词设置界面：热词列表中包含人名与产品名，下方为摘要上下文"
+                  />
+                </picture>
+              </figure>
+            </article>
+
+            <article class="feature">
+              <div class="feature-copy">
+                <span class="feature-index"><b>03</b> / 03</span>
+                <h3><span class="nb">可连接本地大模型，</span><span class="nb">纪要由你做主</span></h3>
+                <p class="lead">
+                  摘要支持任意 OpenAI 兼容接口：可以选用云端服务，也可以填写自定义 Base URL，连接本机 Ollama 或公司内网部署的模型。
+                </p>
+                <ul class="points">
+                  <li>自定义端点，例如 <code>http://localhost:11434/v1</code></li>
+                  <li>连接本地模型时，生成摘要不必把会议内容交给第三方 AI 服务</li>
+                  <li>API Key 只存入系统钥匙串，不写入数据库，也不会回显明文</li>
+                </ul>
+                <p class="footnote">
+                  说明：语音转写目前使用云端的豆包录音文件识别 2.0，音频需经你自己的火山引擎 TOS 存储桶上传。
+                </p>
+              </div>
+              <figure class="window">
+                <div class="window-bar" aria-hidden="true"><i></i><i></i><i></i></div>
+                <picture>
+                  <source
+                    media="(max-width: 640px)"
+                    srcset="assets/screenshots/llm-mobile.png"
+                    width="1101"
+                    height="1362"
+                  />
+                  <img
+                    src="assets/screenshots/llm.png"
+                    width="1280"
+                    height="800"
+                    loading="lazy"
+                    alt="摘要模型设置：服务商为自定义（OpenAI 兼容），Base URL 为 http://localhost:11434/v1，模型为 qwen3:14b"
+                  />
+                </picture>
+              </figure>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="how" aria-labelledby="how-title">
+        <div class="container">
+          <div class="section-head">
+            <p class="kicker">How it works</p>
+            <h2 id="how-title">三步，从录音到纪要</h2>
+          </div>
+          <ol class="steps">
+            <li class="step">
+              <span class="step-num">STEP 01</span>
+              <h3>录制或导入</h3>
+              <p>开会时一键录下麦克风与系统声音，或导入已有的会议音频。</p>
+            </li>
+            <li class="step">
+              <span class="step-num">STEP 02</span>
+              <h3>自动转写</h3>
+              <p>停止录音即自动建会并转写，区分发言人，热词让专有名词更准确。</p>
+            </li>
+            <li class="step">
+              <span class="step-num">STEP 03</span>
+              <h3>生成摘要</h3>
+              <p>一键整理要点、待办与决策，支持中文、英文或双语，复制即可分享。</p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="section" id="more" aria-labelledby="more-title">
+        <div class="container">
+          <div class="section-head">
+            <p class="kicker">More</p>
+            <h2 id="more-title">更多能力</h2>
+          </div>
+          <div class="more">
+            <figure class="window">
+              <div class="window-bar" aria-hidden="true"><i></i><i></i><i></i></div>
+              <img
+                src="assets/screenshots/home.png"
+                width="1280"
+                height="800"
+                loading="lazy"
+                alt="Meetphant 首页：选择麦克风后开始录音，或导入音频并转写"
+              />
+            </figure>
+            <div class="cards">
+              <div class="card">
+                <h3>导入音频</h3>
+                <p>支持 wav、mp3、m4a、flac 等常见格式，旧录音也能整理成纪要。</p>
+              </div>
+              <div class="card">
+                <h3>要点 · 待办 · 决策</h3>
+                <p>结构化摘要直接回答「谈了什么、谁做什么、定了什么」。</p>
+              </div>
+              <div class="card">
+                <h3>多家模型预设</h3>
+                <p>内置通义千问、DeepSeek、OpenAI、Kimi、智谱、豆包等预设，也可自定义。</p>
+              </div>
+              <div class="card">
+                <h3>自动更新</h3>
+                <p>启动时检查新版本，一键下载安装并重启，始终保持最新。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="download" id="download" aria-labelledby="download-title">
+        <div class="container">
+          <div class="download-panel">
+            <img class="icon" src="assets/meetphant-icon.svg" width="64" height="64" alt="" />
+            <h2 id="download-title">下一场会议，让大象帮你记</h2>
+            <p>提供精简版安装包，以及内置 FFmpeg、适合弱网环境的离线安装包，适用于 Windows 10 / 11。</p>
+            <div class="hero-cta">
+              <a class="btn btn-primary" href="https://github.com/leoshcn/meetphant/releases/latest">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                下载最新版本
+              </a>
+              <a class="btn btn-ghost" href="https://github.com/leoshcn/meetphant">在 GitHub 查看</a>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container">
+        <span>© 2026 Meetphant 会议助手</span>
+        <nav aria-label="页脚">
+          <a href="https://github.com/leoshcn/meetphant">GitHub</a>
+          <a href="https://github.com/leoshcn/meetphant/releases/latest">下载</a>
+          <a href="en/" hreflang="en" lang="en">English</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>

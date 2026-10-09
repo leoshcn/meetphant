@@ -15,7 +15,8 @@
     "pack:lean": "node scripts/pack-installers.mjs lean",
     "pack:offline": "node scripts/pack-installers.mjs offline",
     "pack:all": "node scripts/pack-installers.mjs all",
-    "pack:latest-json": "node scripts/write-latest-json.mjs"
+    "pack:latest-json": "node scripts/write-latest-json.mjs",
+    "screenshots": "node scripts/screenshots/capture.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
@@ -32,6 +33,7 @@
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
     "jsdom": "^26.1.0",
+    "playwright": "^1.64.0",
     "typescript": "~5.8.3",
     "vite": "^7.0.4",
     "vitest": "^3.2.4"
