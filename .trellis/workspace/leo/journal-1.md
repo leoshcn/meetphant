@@ -389,3 +389,26 @@ CTO review of the codebase, then iteration 1. #1: CI gate on push/PR (windows-la
 ### Status
 
 [OK] **Completed**
+
+
+## Session 13: 摘要 LLM 可配置 + Meetphant 视觉标识
+
+**Date**: 2026-10-09
+**Task**: 摘要 LLM 可配置 + Meetphant 视觉标识
+**Branch**: `main`
+
+### Summary
+
+摘要模型支持用户配置 OpenAI 兼容服务商/Base URL/Key/模型（含 DashScope Key 自动迁移、连接测试、换端点需重填 Key）；用 Meetphant 图标替换全套应用图标与 favicon（注意：换图标后需 cargo clean -p meetphant 才会重新嵌入 exe）；启动页加入 logo。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2e54600` | (see git log) |
+| `a03c6e8` | (see git log) |
+| `66e84c7` | (see git log) |
+
+### Status
+
+[OK] **Completed**
