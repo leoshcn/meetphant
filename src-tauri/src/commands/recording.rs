@@ -1,6 +1,7 @@
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
-use crate::error::{AppErrorDto, CmdResult};
+use super::run_blocking;
+use crate::error::CmdResult;
 use crate::services::ffmpeg_service::{self, FfmpegStatus};
 use crate::services::recording_service::{
     self, DevicesResponse, RecordStartResponse, RecordStatusResponse, RecordStopResponse,
@@ -8,30 +9,30 @@ use crate::services::recording_service::{
 use crate::AppState;
 
 #[tauri::command(rename_all = "snake_case")]
-pub fn record_list_input_devices() -> CmdResult<DevicesResponse> {
-    recording_service::list_input_devices()
+pub async fn record_list_input_devices() -> CmdResult<DevicesResponse> {
+    run_blocking(recording_service::list_input_devices).await
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub fn record_start(
-    state: State<'_, AppState>,
+pub async fn record_start(
+    app: AppHandle,
     device_id: Option<String>,
 ) -> CmdResult<RecordStartResponse> {
-    let recording_dir = {
-        let conn = state
-            .db
-            .lock()
-            .map_err(|_| AppErrorDto::internal("Database lock poisoned"))?;
-        let settings = crate::services::get_settings(&conn)?;
-        settings.recording_dir
-    };
-
-    state.recording.start(&recording_dir, device_id.as_deref())
+    run_blocking(move || {
+        let state = app.state::<AppState>();
+        let recording_dir = {
+            let conn = crate::db::lock(&state.db)?;
+            crate::services::get_settings(&conn)?.recording_dir
+        };
+        state.recording.start(&recording_dir, device_id.as_deref())
+    })
+    .await
 }
 
+/// Waits for the WAV → M4A encode, so it must stay off the main thread.
 #[tauri::command(rename_all = "snake_case")]
-pub fn record_stop(state: State<'_, AppState>) -> CmdResult<RecordStopResponse> {
-    state.recording.stop()
+pub async fn record_stop(app: AppHandle) -> CmdResult<RecordStopResponse> {
+    run_blocking(move || app.state::<AppState>().recording.stop()).await
 }
 
 #[tauri::command(rename_all = "snake_case")]

@@ -1,6 +1,9 @@
+use std::sync::Mutex;
+
 use chrono::Utc;
 use rusqlite::Connection;
 
+use crate::db;
 use crate::error::{AppErrorDto, CmdResult};
 use crate::models::{is_supported_summary_language, Summary};
 use crate::providers::qwen::{HttpQwenClient, SummaryGenerateInput, SummaryGenerator};
@@ -94,8 +97,11 @@ fn require_transcript(conn: &Connection, meeting_id: &str) -> CmdResult<String> 
 }
 
 /// Generate (or regenerate) a summary for a meeting that already has a transcript.
+///
+/// The DB lock is held only to read inputs and to write the result, never while
+/// `generator` runs (an LLM call can take up to the HTTP timeout).
 pub fn generate_summary(
-    conn: &Connection,
+    db: &Mutex<Connection>,
     meeting_id: &str,
     language: &str,
     generator: &dyn SummaryGenerator,
@@ -105,16 +111,20 @@ pub fn generate_summary(
             "Unsupported summary language; use zh-CN, en, or zh-en",
         ));
     }
-    let _ = meeting_service::get_meeting(conn, meeting_id)?;
-    let transcript = require_transcript(conn, meeting_id)?;
-    let settings = settings_service::get_settings(conn)?;
+    let (transcript, context_text) = {
+        let conn = db::lock(db)?;
+        let _ = meeting_service::get_meeting(&conn, meeting_id)?;
+        let transcript = require_transcript(&conn, meeting_id)?;
+        let settings = settings_service::get_settings(&conn)?;
+        (transcript, settings.context_text)
+    };
     let credentials = credentials::require_dashscope_credentials()?;
 
     let content = generator.generate(
         &credentials,
         &SummaryGenerateInput {
             transcript,
-            context_text: settings.context_text,
+            context_text,
             language: language.to_string(),
         },
     )?;
@@ -127,18 +137,22 @@ pub fn generate_summary(
         language: language.to_string(),
         created_at: Utc::now().to_rfc3339(),
     };
-    upsert_summary(conn, &summary)?;
+    let conn = db::lock(db)?;
+    // The meeting may have been deleted while the lock was released. Foreign keys are
+    // not enforced (`PRAGMA foreign_keys` is off), so check before writing an orphan.
+    let _ = meeting_service::get_meeting(&conn, meeting_id)?;
+    upsert_summary(&conn, &summary)?;
     Ok(summary)
 }
 
 /// Production entry: real HTTP Qwen client.
 pub fn generate_summary_http(
-    conn: &Connection,
+    db: &Mutex<Connection>,
     meeting_id: &str,
     language: &str,
 ) -> CmdResult<Summary> {
     let client = HttpQwenClient::new()?;
-    generate_summary(conn, meeting_id, language, &client)
+    generate_summary(db, meeting_id, language, &client)
 }
 
 #[cfg(test)]
@@ -195,8 +209,8 @@ mod tests {
     fn generate_with_empty_context_works() {
         reset_for_test();
         set_dashscope_credentials("sk-test").unwrap();
-        let conn = open_memory().unwrap();
-        let (meeting_id, path) = seed_meeting_with_transcript(&conn);
+        let db = Mutex::new(open_memory().unwrap());
+        let (meeting_id, path) = seed_meeting_with_transcript(&db.lock().unwrap());
 
         let stub = StubGenerator {
             result: Mutex::new(Ok(SummaryContent {
@@ -207,13 +221,13 @@ mod tests {
             last_context: Mutex::new(None),
         };
 
-        let summary = generate_summary(&conn, &meeting_id, "zh-CN", &stub).unwrap();
+        let summary = generate_summary(&db, &meeting_id, "zh-CN", &stub).unwrap();
         assert_eq!(summary.language, "zh-CN");
         assert_eq!(summary.key_points, vec!["发布计划"]);
         assert_eq!(summary.decisions, vec!["下周上线"]);
         assert_eq!(stub.last_context.lock().unwrap().as_deref(), Some(""));
 
-        let loaded = get_summary(&conn, &meeting_id).unwrap();
+        let loaded = get_summary(&db.lock().unwrap(), &meeting_id).unwrap();
         assert_eq!(loaded.key_points, summary.key_points);
         let _ = std::fs::remove_file(path);
     }
@@ -222,10 +236,10 @@ mod tests {
     fn generate_includes_context_text() {
         reset_for_test();
         set_dashscope_credentials("sk-test").unwrap();
-        let conn = open_memory().unwrap();
-        let (meeting_id, path) = seed_meeting_with_transcript(&conn);
+        let db = Mutex::new(open_memory().unwrap());
+        let (meeting_id, path) = seed_meeting_with_transcript(&db.lock().unwrap());
         update_settings(
-            &conn,
+            &db.lock().unwrap(),
             SettingsUpdate {
                 context_text: Some("产品周会".into()),
                 ..Default::default()
@@ -237,7 +251,7 @@ mod tests {
             result: Mutex::new(Ok(SummaryContent::default())),
             last_context: Mutex::new(None),
         };
-        generate_summary(&conn, &meeting_id, "zh-CN", &stub).unwrap();
+        generate_summary(&db, &meeting_id, "zh-CN", &stub).unwrap();
         assert_eq!(
             stub.last_context.lock().unwrap().as_deref(),
             Some("产品周会")
@@ -249,16 +263,16 @@ mod tests {
     fn not_ready_without_transcript() {
         reset_for_test();
         set_dashscope_credentials("sk-test").unwrap();
-        let conn = open_memory().unwrap();
+        let db = Mutex::new(open_memory().unwrap());
         set_credentials("doubao-key").unwrap();
         let (path, path_str) = temp_audio();
-        let meeting = create_from_file(&conn, &path_str).unwrap();
+        let meeting = create_from_file(&db.lock().unwrap(), &path_str).unwrap();
 
         let stub = StubGenerator {
             result: Mutex::new(Ok(SummaryContent::default())),
             last_context: Mutex::new(None),
         };
-        let err = generate_summary(&conn, &meeting.id, "zh-CN", &stub).expect_err("not ready");
+        let err = generate_summary(&db, &meeting.id, "zh-CN", &stub).expect_err("not ready");
         assert_eq!(err.code, "SUMMARY_NOT_READY");
         let _ = std::fs::remove_file(path);
     }
@@ -266,14 +280,14 @@ mod tests {
     #[test]
     fn not_configured_without_dashscope_key() {
         reset_for_test();
-        let conn = open_memory().unwrap();
-        let (meeting_id, path) = seed_meeting_with_transcript(&conn);
+        let db = Mutex::new(open_memory().unwrap());
+        let (meeting_id, path) = seed_meeting_with_transcript(&db.lock().unwrap());
 
         let stub = StubGenerator {
             result: Mutex::new(Ok(SummaryContent::default())),
             last_context: Mutex::new(None),
         };
-        let err = generate_summary(&conn, &meeting_id, "zh-CN", &stub).expect_err("no key");
+        let err = generate_summary(&db, &meeting_id, "zh-CN", &stub).expect_err("no key");
         assert_eq!(err.code, "SUMMARY_NOT_CONFIGURED");
         let _ = std::fs::remove_file(path);
     }
@@ -282,8 +296,8 @@ mod tests {
     fn parse_failure_from_provider() {
         reset_for_test();
         set_dashscope_credentials("sk-test").unwrap();
-        let conn = open_memory().unwrap();
-        let (meeting_id, path) = seed_meeting_with_transcript(&conn);
+        let db = Mutex::new(open_memory().unwrap());
+        let (meeting_id, path) = seed_meeting_with_transcript(&db.lock().unwrap());
 
         let stub = StubGenerator {
             result: Mutex::new(Err(AppErrorDto::summary_provider_error(
@@ -291,10 +305,81 @@ mod tests {
             ))),
             last_context: Mutex::new(None),
         };
-        let err = generate_summary(&conn, &meeting_id, "zh-CN", &stub).expect_err("parse");
+        let err = generate_summary(&db, &meeting_id, "zh-CN", &stub).expect_err("parse");
         assert_eq!(err.code, "SUMMARY_PROVIDER_ERROR");
-        let missing = get_summary(&conn, &meeting_id).expect_err("no row");
+        let missing = get_summary(&db.lock().unwrap(), &meeting_id).expect_err("no row");
         assert_eq!(missing.code, "NOT_FOUND");
+        let _ = std::fs::remove_file(path);
+    }
+
+    /// Fails the generation if the DB lock is held while the provider runs.
+    struct LockProbeGenerator<'a> {
+        db: &'a Mutex<Connection>,
+    }
+
+    impl SummaryGenerator for LockProbeGenerator<'_> {
+        fn generate(
+            &self,
+            _credentials: &credentials::DashScopeCredentials,
+            _input: &SummaryGenerateInput,
+        ) -> CmdResult<SummaryContent> {
+            assert!(
+                self.db.try_lock().is_ok(),
+                "DB lock must not be held while the summary provider runs"
+            );
+            Ok(SummaryContent::default())
+        }
+    }
+
+    #[test]
+    fn db_lock_released_during_generation() {
+        reset_for_test();
+        set_dashscope_credentials("sk-test").unwrap();
+        let db = Mutex::new(open_memory().unwrap());
+        let (meeting_id, path) = seed_meeting_with_transcript(&db.lock().unwrap());
+
+        let probe = LockProbeGenerator { db: &db };
+        generate_summary(&db, &meeting_id, "zh-CN", &probe).unwrap();
+        assert!(get_summary(&db.lock().unwrap(), &meeting_id).is_ok());
+        let _ = std::fs::remove_file(path);
+    }
+
+    /// Deletes the meeting mid-generation, as a concurrent `meetings_delete` could.
+    struct DeletingGenerator<'a> {
+        db: &'a Mutex<Connection>,
+        meeting_id: String,
+    }
+
+    impl SummaryGenerator for DeletingGenerator<'_> {
+        fn generate(
+            &self,
+            _credentials: &credentials::DashScopeCredentials,
+            _input: &SummaryGenerateInput,
+        ) -> CmdResult<SummaryContent> {
+            meeting_service::delete_meeting(&self.db.lock().unwrap(), &self.meeting_id)?;
+            Ok(SummaryContent::default())
+        }
+    }
+
+    #[test]
+    fn meeting_deleted_during_generation_writes_nothing() {
+        reset_for_test();
+        set_dashscope_credentials("sk-test").unwrap();
+        let db = Mutex::new(open_memory().unwrap());
+        let (meeting_id, path) = seed_meeting_with_transcript(&db.lock().unwrap());
+
+        let deleting = DeletingGenerator {
+            db: &db,
+            meeting_id: meeting_id.clone(),
+        };
+        let err = generate_summary(&db, &meeting_id, "zh-CN", &deleting).expect_err("deleted");
+        assert_eq!(err.code, "NOT_FOUND");
+        let rows: i64 = db
+            .lock()
+            .unwrap()
+            .query_row("SELECT COUNT(*) FROM summaries", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(rows, 0);
         let _ = std::fs::remove_file(path);
     }
 }

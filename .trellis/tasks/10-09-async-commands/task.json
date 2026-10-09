@@ -3,7 +3,7 @@
   "name": "async-commands",
   "title": "IO 命令异步化 + 网络请求期间不持锁",
   "description": "",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

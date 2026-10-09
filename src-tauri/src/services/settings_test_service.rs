@@ -1,8 +1,11 @@
 //! Credential connectivity probes — merge form overrides with keyring/SQLite, never persist.
 
+use std::sync::Mutex;
+
 use rusqlite::Connection;
 use serde::Serialize;
 
+use crate::db;
 use crate::error::{AppErrorDto, CmdResult};
 use crate::providers::doubao::HttpAsyncClient;
 use crate::providers::qwen::client::HttpQwenClient;
@@ -124,8 +127,9 @@ pub fn test_doubao(doubao_api_key: Option<&str>) -> CmdResult<SettingsTestResult
     Ok(SettingsTestResult::ok())
 }
 
+/// Holds the DB lock only while merging saved config, not during the network probe.
 pub fn test_tos(
-    conn: &Connection,
+    db: &Mutex<Connection>,
     tos_access_key_id: Option<&str>,
     tos_secret_access_key: Option<&str>,
     tos_region: Option<&str>,
@@ -133,7 +137,7 @@ pub fn test_tos(
     tos_endpoint: Option<&str>,
 ) -> CmdResult<SettingsTestResult> {
     let config = merge_tos_config(
-        conn,
+        &*db::lock(db)?,
         tos_access_key_id,
         tos_secret_access_key,
         tos_region,

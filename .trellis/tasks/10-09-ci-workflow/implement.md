@@ -31,5 +31,5 @@ cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings &
 - 第 2–4 步 DONE：新增 `.github/workflows/ci.yml`，`release.yml` 没有改动
 - **计划外修复**：`cargo test` 一直以 0xc0000139 崩溃，之前的任务记录把它当成"环境问题"，实际上 Rust 测试已经很久没真正跑过，放到 CI 上也会失败。根因是 Tauri 只把 Common-Controls v6 manifest 嵌进 app exe。改法：`src-tauri/build.rs` 改用 `new_without_app_manifest()`，再通过链接参数给所有 MSVC 产物声明这个依赖。验证：90/90 测试通过；`target/debug/meetphant.exe` 里仍然包含 Common-Controls 依赖。已写入 `spec/backend/quality-guidelines.md`
 - 本地验证：typecheck ✓、vitest 50/50 ✓、build ✓、fmt ✓、clippy ✓、cargo test 90/90 ✓
-- 第 5 步 PENDING：需要推到远端提 PR，才能验证 CI 绿灯和故意失败时变红
-- 手动检查 PENDING：`npm run tauri dev` 里打开"导入音频"的文件对话框，确认系统对话框和 manifest 改动前表现一致
+- 第 5 步 DONE：PR #1。`e959c42` 绿（8m02s，CI 上 Rust 90/90）；探测提交 `bc7856d` 被 `cargo fmt --check` 拦下变红，`68ccadf` 被 `cargo test` 拦下变红（90 passed, 1 failed）；revert 提交 `2599c93` 恢复绿色，代码树与 `e959c42` 一致
+- 手动检查 DONE（用户确认）：`tauri dev` 里的文件对话框与 manifest 改动前一致
