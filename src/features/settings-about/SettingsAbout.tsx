@@ -1,8 +1,22 @@
+import { useState } from "react";
+import { logsOpenDir, type AppError } from "../../ipc";
+import { friendlyErrorMessage } from "../../shared/lib";
 import { Button } from "../../shared/ui";
 import { useAppUpdate } from "../app-update";
 import styles from "./SettingsAbout.module.css";
 
 export function SettingsAboutPanel() {
+  const [logsError, setLogsError] = useState<string | null>(null);
+
+  async function openLogs() {
+    setLogsError(null);
+    try {
+      await logsOpenDir();
+    } catch (err) {
+      setLogsError(friendlyErrorMessage(err as AppError));
+    }
+  }
+
   const {
     phase,
     currentVersion,
@@ -118,6 +132,16 @@ export function SettingsAboutPanel() {
             安装并重启
           </Button>
         ) : null}
+      </div>
+
+      <p className={styles.hint}>
+        遇到问题时，可以打开日志文件夹，把最近的日志文件发给我们。日志不包含密钥。
+      </p>
+      {logsError ? <p className={styles.error}>{logsError}</p> : null}
+      <div className={styles.actions}>
+        <Button type="button" variant="secondary" onClick={() => void openLogs()}>
+          打开日志文件夹
+        </Button>
       </div>
     </section>
   );

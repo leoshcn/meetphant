@@ -1,7 +1,7 @@
 use tauri::{AppHandle, Manager, State};
 
 use super::run_blocking;
-use crate::error::CmdResult;
+use crate::error::{CmdResult, CmdResultExt};
 use crate::models::Job;
 use crate::services::transcription_service;
 use crate::AppState;
@@ -19,13 +19,13 @@ pub async fn jobs_start_transcription(app: AppHandle, meeting_id: String) -> Cmd
         Ok(job)
     })
     .await
+    .log_cmd("jobs_start_transcription")
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn jobs_get(state: State<'_, AppState>, job_id: String) -> CmdResult<Job> {
-    let conn = state
-        .db
-        .lock()
-        .map_err(|_| crate::error::AppErrorDto::internal("Database lock poisoned"))?;
-    transcription_service::get_job(&conn, &job_id)
+    crate::db::with(&state.db, |conn| {
+        transcription_service::get_job(conn, &job_id)
+    })
+    .log_cmd("jobs_get")
 }

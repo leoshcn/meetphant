@@ -3,7 +3,7 @@
   "name": "tracing-logging",
   "title": "接入 tracing 日志与诊断导出",
   "description": "",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

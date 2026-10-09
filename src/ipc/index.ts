@@ -47,7 +47,7 @@ export {
 } from "./commands/meetings";
 export { jobsStartTranscription, jobsGet } from "./commands/jobs";
 export { summaryGenerate, summaryGet } from "./commands/summary";
-export { appHealth } from "./commands/health";
+export { appHealth, logsOpenDir } from "./commands/health";
 export {
   recordListInputDevices,
   recordStart,

@@ -1,7 +1,7 @@
 use tauri::{AppHandle, Manager, State};
 
 use super::run_blocking;
-use crate::error::CmdResult;
+use crate::error::{CmdResult, CmdResultExt};
 use crate::services::ffmpeg_service::{self, FfmpegStatus};
 use crate::services::recording_service::{
     self, DevicesResponse, RecordStartResponse, RecordStatusResponse, RecordStopResponse,
@@ -10,7 +10,9 @@ use crate::AppState;
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn record_list_input_devices() -> CmdResult<DevicesResponse> {
-    run_blocking(recording_service::list_input_devices).await
+    run_blocking(recording_service::list_input_devices)
+        .await
+        .log_cmd("record_list_input_devices")
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -27,17 +29,20 @@ pub async fn record_start(
         state.recording.start(&recording_dir, device_id.as_deref())
     })
     .await
+    .log_cmd("record_start")
 }
 
 /// Waits for the WAV → M4A encode, so it must stay off the main thread.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn record_stop(app: AppHandle) -> CmdResult<RecordStopResponse> {
-    run_blocking(move || app.state::<AppState>().recording.stop()).await
+    run_blocking(move || app.state::<AppState>().recording.stop())
+        .await
+        .log_cmd("record_stop")
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn record_status(state: State<'_, AppState>) -> CmdResult<RecordStatusResponse> {
-    state.recording.status()
+    state.recording.status().log_cmd("record_status")
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -47,5 +52,5 @@ pub fn ffmpeg_status() -> CmdResult<FfmpegStatus> {
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn ffmpeg_download(app: AppHandle) -> CmdResult<FfmpegStatus> {
-    ffmpeg_service::start_download(Some(app))
+    ffmpeg_service::start_download(Some(app)).log_cmd("ffmpeg_download")
 }

@@ -17,6 +17,7 @@ Applies when adding or changing any `#[tauri::command]`, frontend `invoke` wrapp
 | Command | Request | Response | Source |
 |---------|---------|----------|--------|
 | `app_health` | (none) | `{ status, version }` | `src-tauri/src/commands/health.rs`, `src/ipc/commands/health.ts` |
+| `logs_open_dir` | (none) | `void` — opens `app_log_dir()` in the system file manager; `IO_ERROR` on failure | same |
 | `settings_get` | (none) | `Settings` | `src-tauri/src/commands/settings.rs` |
 | `settings_update` | `SettingsUpdate` | `Settings` | same |
 | `settings_clear_doubao_credentials` | (none) | `Settings` | same |
@@ -45,6 +46,17 @@ Applies when adding or changing any `#[tauri::command]`, frontend `invoke` wrapp
 | `recording_hide_to_tray` | (none) | `void` — show recording tray, hide `main` | `src-tauri/src/commands/tray.rs` |
 | `recording_restore_from_tray` | (none) | `void` — show/focus `main`, hide recording tray | same |
 | `recording_hide_tray` | (none) | `void` — hide tray only | same |
+
+### Command execution model
+
+Tauri 2 runs sync `#[tauri::command]` fns on the **main thread**.
+
+- Any command that does network IO, runs a subprocess (FFmpeg), touches audio devices, or reads audio files must be `async fn` and wrap its work in `commands::run_blocking` (`spawn_blocking`).
+  - Pass `AppHandle` and call `app.state::<AppState>()` inside the closure.
+  - Do **not** use `#[tauri::command(async)]` on a sync fn. It runs the body on a tokio worker, where `reqwest::blocking` is unsafe.
+- Pure-SQLite commands stay sync and use `crate::db::with(&state.db, f)`.
+- Never hold the DB lock (`db::lock` / `db::with`) across a network call. Read inputs, release the lock, call the provider, then re-lock to write. For example, `summary_service::generate_summary` takes `&Mutex<Connection>`.
+- Every command's result ends with `.log_cmd("<command_name>")` (see logging-guidelines.md).
 
 ### Window events (no command / DTO change)
 
