@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "src/ layout; demo entry must stay outside src and out of build"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "test/typecheck gates must stay green"}
