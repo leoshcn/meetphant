@@ -5,6 +5,7 @@ import { MeetingRecordingPanel } from "../../features/meeting-recording";
 import { MeetingSummaryPanel } from "../../features/meeting-summary";
 import { MeetingSidebar } from "../../features/meeting-sidebar";
 import type { Meeting } from "../../ipc";
+import meetphantIcon from "../../assets/meetphant-icon.svg";
 import styles from "./HomePage.module.css";
 
 const WORKSPACE_SPLIT_MIN = 960;
@@ -215,6 +216,16 @@ export function HomePage({
   if (!showWorkspace || !activeMeetingId) {
     workspaceBody = (
       <div className={styles.stageBody}>
+        {!isDraft && (
+          <div className={styles.stageBrand}>
+            <img
+              className={styles.stageBrandIcon}
+              src={meetphantIcon}
+              alt=""
+              aria-hidden="true"
+            />
+          </div>
+        )}
         <MeetingRecordingPanel
           draftMeetingId={isDraft ? activeMeetingId : null}
           onOpenSettings={onOpenSettings}
