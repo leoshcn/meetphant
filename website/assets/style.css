@@ -257,6 +257,9 @@ h3 {
   font-size: 13px;
   color: var(--fg-subtle);
 }
+.hero-note a {
+  white-space: nowrap;
+}
 .hero-shot {
   margin: clamp(56px, 8vw, 88px) auto 0;
   max-width: 1080px;
@@ -490,6 +493,22 @@ h3 {
   font-size: 14px;
   color: var(--fg-muted);
   line-height: 1.65;
+}
+.card-wide {
+  grid-column: 1 / -1;
+}
+.card a,
+.hero-note a,
+.site-footer span a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-underline-offset: 3px;
+}
+.card a:hover,
+.hero-note a:hover,
+.site-footer span a:hover {
+  color: var(--accent);
 }
 
 /* Download */

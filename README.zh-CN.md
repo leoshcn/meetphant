@@ -135,6 +135,10 @@ npm run screenshots                    # 重新生成 website/assets/screenshots
 
 Tauri 2 · React 19 · TypeScript · Vite · SQLite · 豆包语音 · 通义千问 · 系统钥匙串
 
+## 开源协议
+
+[MIT](./LICENSE) © 2026 Leo Li
+
 ---
 
 <p align="center">

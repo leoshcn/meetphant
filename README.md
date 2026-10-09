@@ -137,6 +137,10 @@ Pushes to `main` that touch `website/**` deploy via `.github/workflows/pages.yml
 
 Tauri 2 · React 19 · TypeScript · Vite · SQLite · Doubao ASR · Qwen · OS keyring
 
+## License
+
+[MIT](./LICENSE) © 2026 Leo Li
+
 ---
 
 <p align="center">
