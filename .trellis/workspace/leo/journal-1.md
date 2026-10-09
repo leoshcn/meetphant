@@ -456,3 +456,24 @@ Refined app visual design for a cleaner, more polished feel: new token system (s
 ### Status
 
 [OK] **Completed**
+
+
+## Session 16: Redesign bilingual README
+
+**Date**: 2026-10-09
+**Task**: Redesign bilingual README
+**Branch**: `main`
+
+### Summary
+
+Rewrote README.md and README.zh-CN.md based on the product website: badges, feature sections with auto-generated website screenshots, download/setup/dev sections, collapsible packaging and website details; synced provider presets, import formats and features with source; removed outdated docs/screenshots. Pushed to main.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d6ede95` | (see git log) |
+
+### Status
+
+[OK] **Completed**

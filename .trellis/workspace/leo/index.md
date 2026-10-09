@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 15
+- **Total Sessions**: 16
 - **Last Active**: 2026-10-09
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~458 | Active |
+| `journal-1.md` | ~479 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 16 | 2026-10-09 | Redesign bilingual README | `d6ede95` | `main` |
 | 15 | 2026-10-09 | Meetphant 产品官网 | `f4a6194`, `ced26fe`, `b7ecd9f` | `main` |
 | 14 | 2026-10-09 | Visual design refinement | `f969d83` | `main` |
 | 13 | 2026-10-09 | 摘要 LLM 可配置 + Meetphant 视觉标识 | `2e54600`, `a03c6e8`, `66e84c7` | `main` |
