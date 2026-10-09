@@ -366,3 +366,26 @@ Switched Doubao ASR to new-console API Key (X-Api-Key only; legacy App Id/Token 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 12: Refactor iteration 1: CI, async commands, tracing
+
+**Date**: 2026-10-09
+**Task**: Refactor iteration 1: CI, async commands, tracing
+**Branch**: `main`
+
+### Summary
+
+CTO review of the codebase, then iteration 1. #1: CI gate on push/PR (windows-latest), plus a fix for cargo test aborting with 0xc0000139 (Common-Controls manifest); Rust tests now run (90). #2: 9 IO-bound commands are now async + spawn_blocking, and generate_summary no longer holds the DB lock during the LLM call. #3: tracing file logs, log_cmd on all commands, transcription spans, fail_job, db::with, and an Open Log Folder button. Follow-ups for iteration 2: job recovery, recording crash recovery, versioned migrations + PRAGMA foreign_keys, record_stop background encode. #3 manual verification still pending.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `85db523` | (see git log) |
+| `17e3448` | (see git log) |
+| `cf9eb47` | (see git log) |
+
+### Status
+
+[OK] **Completed**
