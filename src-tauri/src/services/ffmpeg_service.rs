@@ -243,6 +243,7 @@ pub fn start_download(app: Option<AppHandle>) -> CmdResult<FfmpegStatus> {
                     });
                 }
                 Err(e) => {
+                    tracing::warn!(code = %e.code, "ffmpeg.download failed");
                     write_progress(|p| {
                         p.phase = "error".into();
                         p.message = Some(e.message.clone());

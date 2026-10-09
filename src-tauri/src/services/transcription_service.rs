@@ -1,5 +1,5 @@
 use std::fs;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use chrono::Utc;
 use rusqlite::Connection;
@@ -211,7 +211,9 @@ fn run_async_path(
     )?;
 
     // Best-effort delete — must not fail a successful transcript.
-    let _ = tos.delete_object(&tos_config, &object_key);
+    if let Err(err) = tos.delete_object(&tos_config, &object_key) {
+        tracing::warn!(object_key = %object_key, code = %err.code, "tos.delete failed");
+    }
 
     Ok((output.text, output.raw_json))
 }
@@ -269,10 +271,23 @@ fn execute_transcription_job_with_poll(
     })();
 
     if let Err(err) = result {
-        let _ = mark_job_failed(conn, job_id, &err.code, &err.message);
+        fail_job(conn, job_id, &err);
         return Err(err);
     }
     Ok(())
+}
+
+/// Persist a terminal failure and log it. Also logs when persisting itself fails,
+/// since the job would otherwise stay `running` without a trace.
+fn fail_job(conn: &Connection, job_id: &str, err: &AppErrorDto) {
+    tracing::warn!(code = %err.code, "job.failed");
+    if let Err(mark_err) = mark_job_failed(conn, job_id, &err.code, &err.message) {
+        tracing::error!(code = %err.code, mark_code = %mark_err.code, "could not persist job failure");
+    }
+}
+
+fn elapsed_ms(started: Instant) -> u64 {
+    u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX)
 }
 
 /// Spawn background work using real HTTP / TOS clients.
@@ -280,41 +295,49 @@ pub fn spawn_transcription_job(app: tauri::AppHandle, job_id: String) {
     std::thread::spawn(move || {
         use tauri::Manager;
 
+        let span = tracing::info_span!(
+            "transcription",
+            job_id = %job_id,
+            meeting_id = tracing::field::Empty
+        );
+        let _entered = span.enter();
+
         let Some(state) = app.try_state::<crate::AppState>() else {
+            tracing::error!("app state unavailable; job left running");
             return;
         };
-        let Ok(async_asr) = HttpAsyncClient::new() else {
-            return;
+        let lock_db = || crate::db::lock(&state.db);
+
+        let async_asr = match HttpAsyncClient::new() {
+            Ok(client) => client,
+            Err(err) => {
+                // Previously returned silently, leaving the job `running` forever.
+                if let Ok(conn) = lock_db() {
+                    fail_job(&conn, &job_id, &err);
+                }
+                return;
+            }
         };
         let tos = HttpTosClient::new();
 
         let (ctx, tos_config, credentials) = {
-            let Ok(conn) = state.db.lock() else {
+            let Ok(conn) = lock_db() else {
                 return;
             };
-            let ctx = match load_work_context(&conn, &job_id) {
-                Ok(ctx) => ctx,
+            let loaded = load_work_context(&conn, &job_id).and_then(|ctx| {
+                let credentials = credentials::require_credentials()?;
+                let tos_config = load_tos_config(&conn)?;
+                Ok((ctx, tos_config, credentials))
+            });
+            match loaded {
+                Ok(loaded) => loaded,
                 Err(err) => {
-                    let _ = mark_job_failed(&conn, &job_id, &err.code, &err.message);
+                    fail_job(&conn, &job_id, &err);
                     return;
                 }
-            };
-            let credentials = match credentials::require_credentials() {
-                Ok(c) => c,
-                Err(err) => {
-                    let _ = mark_job_failed(&conn, &job_id, &err.code, &err.message);
-                    return;
-                }
-            };
-            let tos_config = match load_tos_config(&conn) {
-                Ok(c) => c,
-                Err(err) => {
-                    let _ = mark_job_failed(&conn, &job_id, &err.code, &err.message);
-                    return;
-                }
-            };
-            (ctx, tos_config, credentials)
+            }
         };
+        span.record("meeting_id", tracing::field::display(&ctx.meeting_id));
         let object_key = build_object_key(&ctx.meeting_id, &ctx.source_path);
 
         // DB lock is not held while uploading / polling.
@@ -325,7 +348,11 @@ pub fn spawn_transcription_job(app: tauri::AppHandle, job_id: String) {
                 ));
             }
 
+            tracing::info!(file_size = ctx.file_size, "upload.start");
+            let started = Instant::now();
             tos.put_file(&tos_config, &ctx.source_path, &object_key)?;
+            tracing::info!(elapsed_ms = elapsed_ms(started), "upload.done");
+
             let audio_url = tos.pre_sign_get(&tos_config, &object_key, PRESIGN_TTL_SECS)?;
             let format = audio_format_from_path(&ctx.source_path);
             let submit = async_asr.submit(
@@ -336,48 +363,55 @@ pub fn spawn_transcription_job(app: tauri::AppHandle, job_id: String) {
                     hotwords: ctx.hotwords.clone(),
                 },
             )?;
+            tracing::info!(provider_task_id = %submit.request_id, "submit.done");
 
-            {
-                let Ok(conn) = state.db.lock() else {
-                    return Err(AppErrorDto::internal("Database lock poisoned"));
-                };
-                set_provider_task_id(&conn, &job_id, &submit.request_id)?;
-            }
+            set_provider_task_id(&*lock_db()?, &job_id, &submit.request_id)?;
 
-            let output = poll_until_done(
+            let started = Instant::now();
+            let polled = poll_until_done(
                 &async_asr,
                 &credentials,
                 &submit.request_id,
                 submit.log_id.as_deref(),
                 ASYNC_POLL_TIMEOUT,
                 ASYNC_POLL_INTERVAL,
-            )?;
+            );
+            tracing::info!(
+                elapsed_ms = elapsed_ms(started),
+                outcome = if polled.is_ok() {
+                    "succeeded"
+                } else {
+                    "failed"
+                },
+                "poll.done"
+            );
+            let output = polled?;
 
             Ok((output.text, output.raw_json))
         })();
 
-        let Ok(conn) = state.db.lock() else {
+        let Ok(conn) = lock_db() else {
             return;
         };
-        match recognize_result {
-            Ok((text, raw_json)) => {
-                if let Err(err) = meeting_service::upsert_transcript_from_asr(
-                    &conn,
-                    &ctx.meeting_id,
-                    &text,
-                    Some(&raw_json),
-                ) {
-                    let _ = mark_job_failed(&conn, &job_id, &err.code, &err.message);
-                    return;
-                }
-                let _ = mark_job_succeeded(&conn, &job_id);
+        let persisted = recognize_result.and_then(|(text, raw_json)| {
+            meeting_service::upsert_transcript_from_asr(
+                &conn,
+                &ctx.meeting_id,
+                &text,
+                Some(&raw_json),
+            )?;
+            mark_job_succeeded(&conn, &job_id)
+        });
+        match persisted {
+            Ok(()) => {
+                tracing::info!("job.succeeded");
                 drop(conn);
                 // Best-effort delete — must not fail a successful transcript.
-                let _ = tos.delete_object(&tos_config, &object_key);
+                if let Err(err) = tos.delete_object(&tos_config, &object_key) {
+                    tracing::warn!(object_key = %object_key, code = %err.code, "tos.delete failed");
+                }
             }
-            Err(err) => {
-                let _ = mark_job_failed(&conn, &job_id, &err.code, &err.message);
-            }
+            Err(err) => fail_job(&conn, &job_id, &err),
         }
     });
 }

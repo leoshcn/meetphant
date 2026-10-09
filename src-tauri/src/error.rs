@@ -150,9 +150,51 @@ impl From<serde_json::Error> for AppErrorDto {
     }
 }
 
+/// Error codes caused by user input; logged at debug so they do not drown real failures.
+const USER_INPUT_CODES: &[&str] = &["NOT_FOUND", "SETTINGS_INVALID", "INVALID_ARGUMENT"];
+
+fn is_user_input_error(code: &str) -> bool {
+    USER_INPUT_CODES.contains(&code)
+}
+
+/// Log command failures by command name and error code only. `message` is never logged:
+/// some messages carry upstream HTTP response text that may contain sensitive data.
+pub trait CmdResultExt<T> {
+    fn log_cmd(self, cmd: &'static str) -> CmdResult<T>;
+}
+
+impl<T> CmdResultExt<T> for CmdResult<T> {
+    fn log_cmd(self, cmd: &'static str) -> CmdResult<T> {
+        if let Err(err) = &self {
+            if is_user_input_error(&err.code) {
+                tracing::debug!(cmd, code = %err.code, "command failed");
+            } else {
+                tracing::warn!(cmd, code = %err.code, "command failed");
+            }
+        }
+        self
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn user_input_codes_are_classified() {
+        assert!(is_user_input_error("NOT_FOUND"));
+        assert!(is_user_input_error("SETTINGS_INVALID"));
+        assert!(!is_user_input_error("ASR_PROVIDER_ERROR"));
+        assert!(!is_user_input_error("INTERNAL"));
+    }
+
+    #[test]
+    fn log_cmd_passes_result_through() {
+        let ok: CmdResult<u8> = Ok(7);
+        assert_eq!(ok.log_cmd("test_cmd").unwrap(), 7);
+        let err: CmdResult<u8> = Err(AppErrorDto::asr_timeout());
+        assert_eq!(err.log_cmd("test_cmd").unwrap_err().code, "ASR_TIMEOUT");
+    }
 
     #[test]
     fn rusqlite_error_maps_to_db_error() {

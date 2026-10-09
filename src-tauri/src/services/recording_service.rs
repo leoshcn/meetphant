@@ -769,6 +769,7 @@ where
                 guard.flush_paired();
             },
             move |err| {
+                tracing::warn!(error = %err, "audio stream error");
                 if let Ok(mut guard) = mix_err.lock() {
                     guard.err = Some(format!("Audio stream error: {err}"));
                 }
@@ -835,6 +836,7 @@ fn finalize_recording(active: ActiveRecording) -> CmdResult<RecordStopResponse> 
             wav_final
         }
         Err(err) => {
+            tracing::warn!(code = %err.code, "m4a encode failed; falling back to WAV");
             // Encoding failed but PCM may still be usable — fall back to WAV.
             let _ = std::fs::remove_file(&m4a_path);
             let wav_final = m4a_path.with_extension("wav");

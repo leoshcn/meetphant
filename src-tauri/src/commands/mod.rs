@@ -16,7 +16,8 @@ where
     F: FnOnce() -> CmdResult<T> + Send + 'static,
     T: Send + 'static,
 {
-    tauri::async_runtime::spawn_blocking(f)
-        .await
-        .map_err(|_| AppErrorDto::internal("Background task failed"))?
+    tauri::async_runtime::spawn_blocking(f).await.map_err(|_| {
+        tracing::error!("blocking command task panicked");
+        AppErrorDto::internal("Background task failed")
+    })?
 }

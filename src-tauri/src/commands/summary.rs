@@ -1,7 +1,7 @@
 use tauri::{AppHandle, Manager, State};
 
 use super::run_blocking;
-use crate::error::CmdResult;
+use crate::error::{CmdResult, CmdResultExt};
 use crate::models::Summary;
 use crate::services;
 use crate::AppState;
@@ -18,13 +18,11 @@ pub async fn summary_generate(
         services::generate_summary_http(&state.db, &meeting_id, &language)
     })
     .await
+    .log_cmd("summary_generate")
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn summary_get(state: State<'_, AppState>, meeting_id: String) -> CmdResult<Summary> {
-    let conn = state
-        .db
-        .lock()
-        .map_err(|_| crate::error::AppErrorDto::internal("Database lock poisoned"))?;
-    services::get_summary(&conn, &meeting_id)
+    crate::db::with(&state.db, |conn| services::get_summary(conn, &meeting_id))
+        .log_cmd("summary_get")
 }

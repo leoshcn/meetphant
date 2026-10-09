@@ -1,6 +1,7 @@
 mod commands;
 mod db;
 mod error;
+mod logging;
 mod models;
 mod providers;
 mod services;
@@ -26,6 +27,11 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            // First, so migrations and DB open failures below are captured.
+            if let Ok(log_dir) = app.path().app_log_dir() {
+                logging::init(&log_dir);
+            }
+
             let data_dir = app
                 .path()
                 .app_data_dir()
@@ -82,6 +88,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::health::app_health,
+            commands::health::logs_open_dir,
             commands::settings::settings_get,
             commands::settings::settings_update,
             commands::settings::settings_clear_doubao_credentials,

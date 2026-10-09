@@ -22,14 +22,21 @@ pub fn migrate_app_data_dir(new_data_dir: &Path, new_db_path: &Path) {
     };
     let legacy_dir = base.join(LEGACY_IDENTIFIER);
     let legacy_db = legacy_dir.join(LEGACY_DB_FILE);
-    if !legacy_db.exists() || std::fs::copy(&legacy_db, new_db_path).is_err() {
+    if !legacy_db.exists() {
         return;
     }
+    if let Err(err) = std::fs::copy(&legacy_db, new_db_path) {
+        tracing::warn!(kind = ?err.kind(), "legacy database migration failed");
+        return;
+    }
+    tracing::info!("migrated legacy database");
 
     let legacy_ffmpeg = legacy_dir.join("ffmpeg");
     let new_ffmpeg = new_data_dir.join("ffmpeg");
     if legacy_ffmpeg.is_dir() && !new_ffmpeg.exists() {
-        let _ = copy_dir_all(&legacy_ffmpeg, &new_ffmpeg);
+        if let Err(err) = copy_dir_all(&legacy_ffmpeg, &new_ffmpeg) {
+            tracing::warn!(kind = ?err.kind(), "legacy FFmpeg migration failed");
+        }
     }
 }
 
@@ -58,7 +65,10 @@ pub fn migrate_recordings_dir() {
     let legacy = docs.join(LEGACY_RECORDINGS_DIR_NAME);
     let current = docs.join(CURRENT_RECORDINGS_DIR_NAME);
     if legacy.exists() && !current.exists() {
-        let _ = std::fs::rename(&legacy, &current);
+        match std::fs::rename(&legacy, &current) {
+            Ok(()) => tracing::info!("migrated legacy recordings folder"),
+            Err(err) => tracing::warn!(kind = ?err.kind(), "legacy recordings migration failed"),
+        }
     }
 }
 
