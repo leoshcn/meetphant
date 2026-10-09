@@ -3,7 +3,7 @@
 Initialize developer for workflow.
 
 Usage:
-    py -3 init_developer.py <developer-name>
+    python init_developer.py <developer-name>
 
 This creates:
     - .trellis/.developer file with developer info

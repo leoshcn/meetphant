@@ -9,6 +9,7 @@ Provides:
     cmd_set_branch     - Set git branch for task
     cmd_set_base_branch - Set PR target branch
     cmd_set_scope      - Set scope for PR title
+    cmd_set_meta       - Set/overwrite a task metadata key
     cmd_add_subtask    - Link child task to parent
     cmd_remove_subtask - Unlink child task from parent
 """
@@ -141,7 +142,7 @@ _CODEX_CONFIG_DIR = ".codex"
 _SEED_EXAMPLE = (
     "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. "
     "Put spec/research files only — no code paths. "
-    "Run `py -3 .trellis/scripts/get_context.py --mode packages` to list available specs. "
+    "Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. "
     "Delete this line once real entries are added."
 )
 
@@ -171,6 +172,26 @@ def _write_seed_jsonl(path: Path) -> None:
     """
     seed = {"_example": _SEED_EXAMPLE}
     path.write_text(json.dumps(seed, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def _parse_meta_pairs(pairs: list[str] | None) -> dict[str, str] | None:
+    """Parse repeatable ``--meta key=value`` pairs into a dict.
+
+    Returns ``None`` (after printing an error naming the bad value) on the
+    first malformed pair: missing ``=`` or an empty key. Values are stored
+    as-is (strings, no nesting, no type coercion).
+    """
+    meta: dict[str, str] = {}
+    for pair in pairs or []:
+        key, sep, value = pair.partition("=")
+        if not sep or not key:
+            print(
+                colored(f"Error: malformed --meta value '{pair}' (expected key=value)", Colors.RED),
+                file=sys.stderr,
+            )
+            return None
+        meta[key] = value
+    return meta
 
 
 def _default_prd_content(title: str, description: str | None = None) -> str:
@@ -209,6 +230,11 @@ def cmd_create(args: argparse.Namespace) -> int:
 
     if not args.title:
         print(colored("Error: title is required", Colors.RED), file=sys.stderr)
+        return 1
+
+    # Validate --meta (CLI source: fail-fast, before any directory is created)
+    meta = _parse_meta_pairs(getattr(args, "meta", None))
+    if meta is None:
         return 1
 
     # Validate --package (CLI source: fail-fast)
@@ -357,7 +383,7 @@ def cmd_create(args: argparse.Namespace) -> int:
         "parent": None,
         "relatedFiles": [],
         "notes": "",
-        "meta": {},
+        "meta": meta,
     }
 
     write_json(task_json_path, task_data)
@@ -384,10 +410,10 @@ def cmd_create(args: argparse.Namespace) -> int:
     # Handle --parent: establish bidirectional link
     if args.parent:
         parent_dir = resolve_task_dir(args.parent, repo_root)
-        parent_json_path = parent_dir / FILE_TASK_JSON
-        if not parent_json_path.is_file():
+        if not parent_dir or not (parent_dir / FILE_TASK_JSON).is_file():
             print(colored(f"Warning: Parent task.json not found: {args.parent}", Colors.YELLOW), file=sys.stderr)
         else:
+            parent_json_path = parent_dir / FILE_TASK_JSON
             parent_data = read_json(parent_json_path)
             if parent_data:
                 # Add child to parent's children list
@@ -697,6 +723,14 @@ def cmd_add_subtask(args: argparse.Namespace) -> int:
     parent_dir = resolve_task_dir(args.parent_dir, repo_root)
     child_dir = resolve_task_dir(args.child_dir, repo_root)
 
+    if not parent_dir:
+        print(colored(f"Error: Parent task.json not found: {args.parent_dir}", Colors.RED), file=sys.stderr)
+        return 1
+
+    if not child_dir:
+        print(colored(f"Error: Child task.json not found: {args.child_dir}", Colors.RED), file=sys.stderr)
+        return 1
+
     parent_json_path = parent_dir / FILE_TASK_JSON
     child_json_path = child_dir / FILE_TASK_JSON
 
@@ -750,6 +784,14 @@ def cmd_remove_subtask(args: argparse.Namespace) -> int:
     parent_dir = resolve_task_dir(args.parent_dir, repo_root)
     child_dir = resolve_task_dir(args.child_dir, repo_root)
 
+    if not parent_dir:
+        print(colored(f"Error: Parent task.json not found: {args.parent_dir}", Colors.RED), file=sys.stderr)
+        return 1
+
+    if not child_dir:
+        print(colored(f"Error: Child task.json not found: {args.child_dir}", Colors.RED), file=sys.stderr)
+        return 1
+
     parent_json_path = parent_dir / FILE_TASK_JSON
     child_json_path = child_dir / FILE_TASK_JSON
 
@@ -798,7 +840,13 @@ def cmd_set_branch(args: argparse.Namespace) -> int:
 
     if not branch:
         print(colored("Error: Missing arguments", Colors.RED))
-        print("Usage: py -3 task.py set-branch <task-dir> <branch-name>")
+        print("Usage: python task.py set-branch <task-dir> <branch-name>")
+        return 1
+
+    if not target_dir:
+        # target_dir is None here, so it must not appear in the message. This
+        # is also the branch a ref pointing outside the repo lands in.
+        print(colored(f"Error: Task not found: {args.dir}", Colors.RED))
         return 1
 
     task_json = target_dir / FILE_TASK_JSON
@@ -829,10 +877,16 @@ def cmd_set_base_branch(args: argparse.Namespace) -> int:
 
     if not base_branch:
         print(colored("Error: Missing arguments", Colors.RED))
-        print("Usage: py -3 task.py set-base-branch <task-dir> <base-branch>")
-        print("Example: py -3 task.py set-base-branch <dir> develop")
+        print("Usage: python task.py set-base-branch <task-dir> <base-branch>")
+        print("Example: python task.py set-base-branch <dir> develop")
         print()
         print("This sets the target branch for PR (the branch your feature will merge into).")
+        return 1
+
+    if not target_dir:
+        # target_dir is None here, so it must not appear in the message. This
+        # is also the branch a ref pointing outside the repo lands in.
+        print(colored(f"Error: Task not found: {args.dir}", Colors.RED))
         return 1
 
     task_json = target_dir / FILE_TASK_JSON
@@ -864,7 +918,13 @@ def cmd_set_scope(args: argparse.Namespace) -> int:
 
     if not scope:
         print(colored("Error: Missing arguments", Colors.RED))
-        print("Usage: py -3 task.py set-scope <task-dir> <scope>")
+        print("Usage: python task.py set-scope <task-dir> <scope>")
+        return 1
+
+    if not target_dir:
+        # target_dir is None here, so it must not appear in the message. This
+        # is also the branch a ref pointing outside the repo lands in.
+        print(colored(f"Error: Task not found: {args.dir}", Colors.RED))
         return 1
 
     task_json = target_dir / FILE_TASK_JSON
@@ -880,4 +940,46 @@ def cmd_set_scope(args: argparse.Namespace) -> int:
     write_json(task_json, data)
 
     print(colored(f"✓ Scope set to: {scope}", Colors.GREEN))
+    return 0
+
+
+# =============================================================================
+# Command: set-meta
+# =============================================================================
+
+def cmd_set_meta(args: argparse.Namespace) -> int:
+    """Set/overwrite one metadata key on an existing task."""
+    repo_root = get_repo_root()
+    target_dir = resolve_task_dir(args.dir, repo_root)
+    key = args.key
+    value = args.value
+
+    if not key:
+        print(colored("Error: Missing arguments", Colors.RED))
+        print("Usage: python task.py set-meta <task-dir> <key> <value>")
+        return 1
+
+    if not target_dir:
+        # target_dir is None here, so it must not appear in the message. This
+        # is also the branch a ref pointing outside the repo lands in.
+        print(colored(f"Error: Task not found: {args.dir}", Colors.RED))
+        return 1
+
+    task_json = target_dir / FILE_TASK_JSON
+    if not task_json.is_file():
+        print(colored(f"Error: task.json not found at {target_dir}", Colors.RED))
+        return 1
+
+    data = read_json(task_json)
+    if not data:
+        return 1
+
+    meta = data.get("meta")
+    if not isinstance(meta, dict):
+        meta = {}
+    meta[key] = value
+    data["meta"] = meta
+    write_json(task_json, data)
+
+    print(colored(f"✓ Meta set: {key} = {value}", Colors.GREEN))
     return 0
