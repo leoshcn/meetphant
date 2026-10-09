@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "测试策略与禁止模式"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "错误码稳定性"}

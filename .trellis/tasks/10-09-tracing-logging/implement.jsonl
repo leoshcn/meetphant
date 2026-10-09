@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "现有日志约定（需要补全）"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "禁止记录的敏感字段"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "新增 ipc 命令和关于页按钮的位置"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端 ipc 测试要求"}
