@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端质量命令（cargo test/clippy）"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端质量命令"}

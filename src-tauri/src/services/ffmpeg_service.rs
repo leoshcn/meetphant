@@ -415,7 +415,8 @@ mod tests {
 
     #[test]
     fn init_install_dir_sets_managed_binary_path() {
-        let dir = std::env::temp_dir().join(format!("meetphant-ffmpeg-init-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("meetphant-ffmpeg-init-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         init_install_dir(dir.clone());

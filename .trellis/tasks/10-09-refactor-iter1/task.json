@@ -1,0 +1,30 @@
+{
+  "id": "refactor-iter1",
+  "name": "refactor-iter1",
+  "title": "重构迭代1：响应性、可观测性、CI",
+  "description": "",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "leo",
+  "assignee": "leo",
+  "createdAt": "2026-10-09",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "10-09-async-commands",
+    "10-09-tracing-logging",
+    "10-09-ci-workflow"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
