@@ -41,3 +41,16 @@ Evidence: `src/ipc/client.test.ts`, `src/ipc/commands/*.test.ts` (7 tests).
 - [ ] IPC only via `src/ipc`
 - [ ] Vitest covers new wrappers
 - [ ] User-visible errors use `AppError.message`
+
+---
+
+## Rendering the UI Without Tauri (screenshots / demos)
+
+`npm run screenshots` (`scripts/screenshots/`) renders the real React app in a browser with mocked IPC and writes `website/assets/screenshots/`.
+
+- Install `mockWindows("main")` **before** importing `/src/main.tsx` — it calls `getCurrentWindow()` at module top level.
+- Use `mockIPC(handler, { shouldMockEvents: true })`; components call `listen(...)`, which otherwise fails as an unhandled `plugin:event|listen`.
+- Fixtures must follow `src/ipc/types.ts`; when an IPC command or its shape changes, update `scripts/screenshots/fixtures.ts` too (the script exits non-zero on unmocked commands / visible error alerts).
+- Demo entry lives outside `src/` so `vite build` and `tsc` never include it.
+- Mobile crops (`*-mobile.png`) are clipped by element locators; the website `<picture>` width/height attrs hardcode their sizes — update both if a crop changes size.
+- Re-run `npm run screenshots` after visible UI changes; screenshots are committed, not generated in CI (CJK font rendering differs).
