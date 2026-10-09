@@ -433,3 +433,26 @@ Refined app visual design for a cleaner, more polished feel: new token system (s
 ### Status
 
 [OK] **Completed**
+
+
+## Session 15: Meetphant 产品官网
+
+**Date**: 2026-10-09
+**Task**: Meetphant 产品官网
+**Branch**: `main`
+
+### Summary
+
+中英双语静态官网（website/），突出独立录制、自定义热词、本地大模型摘要三大特性；npm run screenshots 用 Tauri mocks 渲染真实界面生成桌面/手机截图与 OG 图；新增 GitHub Pages 部署工作流；规范补充截图管线约定。特性3按准确措辞：仅摘要可本地，转写仍走云端。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f4a6194` | (see git log) |
+| `ced26fe` | (see git log) |
+| `b7ecd9f` | (see git log) |
+
+### Status
+
+[OK] **Completed**
