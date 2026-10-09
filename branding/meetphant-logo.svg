@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 112" role="img" aria-labelledby="title desc">
+  <title id="title">Meetphant 横向标识</title>
+  <desc id="desc">大象应用图标与白色 meetphant 字标组合，适用于深色背景</desc>
+  <g transform="translate(4 4) scale(.8125)">
+    <rect width="128" height="128" rx="28" fill="#111A20"/>
+    <path d="M43 46C34 38 22 39 17 49c-6 12-1 28 10 34 7 4 15 3 21-1l4-26-9-10Z" fill="#EDF4F0"/>
+    <path d="M85 46c9-8 21-7 26 3 6 12 1 28-10 34-7 4-15 3-21-1l-4-26 9-10Z" fill="#EDF4F0"/>
+    <path d="M64 26c-19 0-31 13-31 32 0 14 9 26 22 30v9c0 12 8 20 20 20 13 0 22-10 22-23H84c0 6-3 10-9 10-5 0-8-3-8-9v-8c15-4 25-17 25-32 0-17-11-29-28-29Z" fill="#EDF4F0"/>
+    <circle cx="76" cy="57" r="3.5" fill="#111A20"/>
+    <circle cx="104" cy="32" r="4" fill="#69D8BD"/>
+  </g>
+  <text x="129" y="75" fill="#EDF4F0" font-family="Segoe UI, Helvetica Neue, sans-serif" font-size="56" font-weight="650" letter-spacing="-2.5">meetphant</text>
+</svg>
