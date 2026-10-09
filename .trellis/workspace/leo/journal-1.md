@@ -344,3 +344,25 @@ Shipped Meetly 0.3.0 Tauri updater (lean channel, About/banner UX, busy-safe ins
 ### Next Steps
 
 - None - task complete
+
+
+## Session 11: Doubao ASR: API Key auth + Seed-ASR 2.0
+
+**Date**: 2026-10-09
+**Task**: Doubao ASR: API Key auth + Seed-ASR 2.0
+**Branch**: `main`
+
+### Summary
+
+Switched Doubao ASR to new-console API Key (X-Api-Key only; legacy App Id/Token keyring entries deleted on startup). Upgraded to recording-file model 2.0 (volc.seedasr.auc); removed flash path so every file goes TOS -> submit/query and TOS is required. Test connection now uses an auth-only query probe (classify_probe; status codes still to be pinned against real keys). Updated UI copy, credentials guide, READMEs, backend specs. Committed Trellis framework update and Meetphant rename alongside. cargo test harness still fails locally with 0xc0000139 (env); clippy, cargo test --no-run, tsc, vitest pass.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `da01593` | (see git log) |
+| `a2c7bbd` | (see git log) |
+
+### Status
+
+[OK] **Completed**

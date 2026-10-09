@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 10
-- **Last Active**: 2026-07-30
+- **Total Sessions**: 11
+- **Last Active**: 2026-10-09
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~346 | Active |
+| `journal-1.md` | ~368 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 11 | 2026-10-09 | Doubao ASR: API Key auth + Seed-ASR 2.0 | `da01593`, `a2c7bbd` | `main` |
 | 10 | 2026-07-30 | 录音悬浮窗与托盘隐藏 | `e743e32` | `main` |
 | 9 | 2026-07-29 | 版本发现与升级 | `44f9419`, `f7ea781` | `main` |
 | 8 | 2026-07-28 | Dark mode and empty-project default | `7d71d6b` | `main` |
