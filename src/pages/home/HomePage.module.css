@@ -19,7 +19,7 @@
   align-items: center;
   justify-content: center;
   padding: var(--space-6) var(--space-5);
-  animation: meetphant-fade-up 320ms ease-out;
+  animation: meetphant-fade-up 320ms var(--ease-out);
 }
 
 .stageHost {
@@ -37,12 +37,14 @@
   flex-direction: column;
   align-items: center;
   gap: var(--space-3);
-  margin-bottom: var(--space-6);
+  margin-bottom: 1.5rem;
 }
 
 .stageBrandIcon {
-  width: 72px;
-  height: 72px;
+  width: 64px;
+  height: 64px;
+  border-radius: 15px;
+  box-shadow: 0 1px 2px rgba(16, 24, 32, 0.12), 0 12px 32px -8px rgba(16, 24, 32, 0.35);
 }
 
 .split {
@@ -66,8 +68,8 @@
 .workspaceTabs {
   display: flex;
   flex-shrink: 0;
-  gap: 0.15rem;
-  padding: 0.55rem 0.85rem 0;
+  gap: 0.25rem;
+  padding: 0 0.85rem;
   border-bottom: 1px solid var(--line);
   background: var(--panel);
 }
@@ -81,21 +83,21 @@
   border: none;
   background: transparent;
   color: var(--ink-muted);
-  padding: 0.5rem 0.75rem;
+  padding: 0.7rem 0.6rem;
   margin-bottom: -1px;
   border-bottom: 2px solid transparent;
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  border-radius: 0;
   transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
 }
 
 .workspaceTab:hover {
   color: var(--ink);
-  background: var(--accent-soft);
 }
 
 .workspaceTabActive {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
+  color: var(--ink);
+  font-weight: 600;
+  border-bottom-color: var(--ink);
 }
 
 .tabPanels {
@@ -134,17 +136,17 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  padding: 0.85rem 1.15rem;
+  min-height: 2.75rem;
+  padding: 0.6rem 1.5rem;
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
 }
 
 .paneHeader h2 {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-weight: 600;
   letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--ink-muted);
 }
 
@@ -152,7 +154,7 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 1rem 1.15rem 1.5rem;
+  padding: 1.25rem 1.5rem 2rem;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -15,12 +15,15 @@
 
 .iconButton:hover:not(:disabled) {
   color: var(--ink);
-  background: var(--accent-soft);
-  border-color: color-mix(in srgb, var(--line) 70%, transparent);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.iconButton:active:not(:disabled) {
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
 }
 
 .iconButton:disabled {
-  opacity: 0.55;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 

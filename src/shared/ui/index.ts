@@ -4,6 +4,8 @@ export type { ConfirmDialogProps } from "./ConfirmDialog";
 export {
   DeleteIcon,
   IconButton,
+  PlusIcon,
   RenameIcon,
   SettingsGearIcon,
+  SidebarIcon,
 } from "./IconButton";

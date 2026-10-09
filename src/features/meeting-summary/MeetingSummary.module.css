@@ -35,7 +35,10 @@
 }
 
 .guide {
-  padding: 1.25rem 0.15rem;
+  padding: 1.25rem 1.25rem;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: var(--sunken);
 }
 
 .guideTitle {
@@ -61,28 +64,33 @@
 .blocks {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.5rem;
 }
 
 .block h3 {
-  margin: 0 0 0.4rem;
+  margin: 0 0 0.55rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid var(--line);
   font-size: 0.75rem;
   font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  letter-spacing: 0.06em;
   color: var(--ink-muted);
 }
 
 .block ul {
   margin: 0;
   padding-left: 1.1rem;
-  line-height: 1.55;
+  line-height: 1.65;
   color: var(--ink);
   font-size: 0.92rem;
 }
 
 .block li + li {
-  margin-top: 0.55rem;
+  margin-top: 0.6rem;
+}
+
+.block li::marker {
+  color: var(--ink-faint);
 }
 
 .item {

@@ -11,6 +11,7 @@ import { HomePage } from "../pages/home";
 import { SettingsPage, type SettingsTab } from "../pages/settings";
 import { errorTitle, friendlyErrorMessage, hideRecorderWidget, hideRecordingTray } from "../shared/lib";
 import { Button, IconButton, SettingsGearIcon } from "../shared/ui";
+import meetphantIcon from "../assets/meetphant-icon.svg";
 import styles from "./CloseRecordingDialog.module.css";
 
 type Screen = "home" | "settings";
@@ -234,9 +235,10 @@ function AppShellChrome({
           className="brand"
           onClick={() => setScreen("home")}
         >
+          <img className="brand-icon" src={meetphantIcon} alt="" aria-hidden="true" />
           Meetphant
           {screen === "home" && titleSuffix ? (
-            <span className="brand-meta">· {titleSuffix}</span>
+            <span className="brand-meta">{titleSuffix}</span>
           ) : null}
         </button>
         <div className="app-header-actions">

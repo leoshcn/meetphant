@@ -98,10 +98,10 @@
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
-  padding: 0.75rem 0.85rem;
+  padding: 0.85rem 1rem;
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--paper) 55%, var(--panel));
+  border-radius: var(--radius-lg);
+  background: var(--sunken);
 }
 
 .speakersHead {
@@ -113,10 +113,9 @@
 
 .speakersHead h3 {
   margin: 0;
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--ink-muted);
 }
 
@@ -164,26 +163,27 @@
 .transcript {
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
+  gap: 1.1rem;
 }
 
 .segment {
-  padding-left: 0.85rem;
-  border-left: 3px solid var(--rail, var(--accent));
+  padding-left: 0.9rem;
+  border-left: 2px solid var(--rail, var(--accent));
 }
 
 .segmentHead {
-  font-size: 0.72rem;
+  font-size: 0.74rem;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
   color: var(--ink-muted);
-  margin-bottom: 0.2rem;
+  margin-bottom: 0.25rem;
 }
 
 .segmentText {
   margin: 0;
-  font-size: 0.95rem;
-  line-height: 1.6;
+  font-size: 0.94rem;
+  line-height: 1.7;
   color: var(--ink);
   white-space: pre-wrap;
 }
@@ -193,8 +193,8 @@
   white-space: pre-wrap;
   line-height: 1.55;
   padding: 0.85rem 1rem;
-  background: color-mix(in srgb, var(--paper) 70%, var(--panel));
-  border-radius: var(--radius-md);
+  background: var(--sunken);
+  border-radius: var(--radius-lg);
   border: 1px solid var(--line);
   font: inherit;
   font-size: 0.95rem;

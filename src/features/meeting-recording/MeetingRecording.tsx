@@ -322,8 +322,10 @@ export function MeetingRecordingPanel({
   if (recording) {
     return (
       <section className={styles.stage}>
-        <p className={styles.brand}>Meetphant</p>
-        <h1 className={styles.stageTitle}>正在录音</h1>
+        <h1 className={styles.recordingBadge}>
+          <span className={styles.recordingDot} aria-hidden="true" />
+          正在录音
+        </h1>
         <p className={styles.timer} aria-live="polite">
           {formatRecordingElapsed(elapsedMs)}
         </p>
@@ -354,7 +356,6 @@ export function MeetingRecordingPanel({
 
   return (
     <section className={styles.stage}>
-      <p className={styles.brand}>Meetphant</p>
       <h1 className={styles.stageTitle}>把会议录音变成可带走的纪要</h1>
       <p className={styles.stageLead}>
         开始录音将同时捕获麦克风与系统扬声器（会议对方声音），或导入本地音频，自动转写并整理纪要。

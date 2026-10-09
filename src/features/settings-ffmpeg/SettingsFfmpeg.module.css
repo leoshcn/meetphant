@@ -2,10 +2,11 @@
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  padding: 1.1rem 1.15rem 1.2rem;
+  padding: 1.3rem 1.4rem 1.4rem;
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--panel);
+  box-shadow: var(--shadow-sm);
 }
 
 .panel h2 {
@@ -13,6 +14,7 @@
   font-size: 1rem;
   font-weight: 600;
   letter-spacing: -0.01em;
+  color: var(--ink);
 }
 
 .hint {
@@ -74,13 +76,14 @@
 .progressTrack {
   height: 0.45rem;
   border-radius: 999px;
-  background: var(--line);
+  background: var(--sunken);
+  box-shadow: inset 0 0 0 1px var(--line);
   overflow: hidden;
 }
 
 .progressFill {
   height: 100%;
-  background: var(--accent, #1f5c57);
+  background: var(--accent);
   border-radius: 999px;
   transition: width 0.2s ease;
 }

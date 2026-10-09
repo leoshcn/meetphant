@@ -13,7 +13,9 @@ import {
   ConfirmDialog,
   DeleteIcon,
   IconButton,
+  PlusIcon,
   RenameIcon,
+  SidebarIcon,
 } from "../../shared/ui";
 import styles from "./MeetingSidebar.module.css";
 
@@ -130,24 +132,12 @@ export function MeetingSidebar({
   if (collapsed) {
     return (
       <aside className={styles.rail}>
-        <button
-          type="button"
-          className={styles.iconRail}
-          onClick={() => void handleNewProject()}
-          aria-label="新建项目"
-          title="新建项目"
-        >
-          +
-        </button>
-        <button
-          type="button"
-          className={styles.iconRail}
-          onClick={onToggleCollapsed}
-          aria-label="展开侧边栏"
-          title="展开侧边栏"
-        >
-          »
-        </button>
+        <IconButton label="展开侧边栏" onClick={onToggleCollapsed}>
+          <SidebarIcon />
+        </IconButton>
+        <IconButton label="新建项目" onClick={() => void handleNewProject()}>
+          <PlusIcon />
+        </IconButton>
       </aside>
     );
   }
@@ -160,17 +150,21 @@ export function MeetingSidebar({
     <aside className={styles.sidebar}>
       <div className={styles.header}>
         <h2>项目</h2>
-        <button
-          type="button"
+        <IconButton
+          label="收起侧边栏"
           className={styles.collapse}
           onClick={onToggleCollapsed}
-          aria-label="收起侧边栏"
         >
-          «
-        </button>
+          <SidebarIcon />
+        </IconButton>
       </div>
       <div className={styles.toolbar}>
-        <Button variant="primary" block onClick={() => void handleNewProject()}>
+        <Button
+          variant="secondary"
+          block
+          onClick={() => void handleNewProject()}
+        >
+          <PlusIcon />
           新建项目
         </Button>
       </div>
