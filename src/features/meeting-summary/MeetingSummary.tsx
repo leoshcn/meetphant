@@ -297,10 +297,11 @@ export function MeetingSummaryPanel({
       {error && (
         <div className={styles.errorBlock} role="alert" title={errorCode}>
           <p className={styles.error}>{error}</p>
-          {errorCode?.includes("DASH") || error.toLowerCase().includes("dashscope") ? (
+          {errorCode === "SUMMARY_NOT_CONFIGURED" ||
+          errorCode === "SUMMARY_PROVIDER_ERROR" ? (
             onOpenSettings ? (
               <Button variant="secondary" onClick={onOpenSettings}>
-                去设置配置 DashScope
+                去设置配置摘要模型
               </Button>
             ) : null
           ) : null}

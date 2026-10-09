@@ -1,10 +1,27 @@
 export type ThemePreference = "system" | "light" | "dark";
 
+/** Summary LLM provider presets (all OpenAI Chat Completions compatible). */
+export type SummaryLlmProvider =
+  | "dashscope"
+  | "deepseek"
+  | "openai"
+  | "moonshot"
+  | "zhipu"
+  | "ark"
+  | "custom";
+
 export type Settings = {
   hotwords: string[];
   context_text: string;
   doubao_configured: boolean;
-  dashscope_configured: boolean;
+  /** True when a summary LLM API key is in the OS keyring (key never returned). */
+  summary_llm_configured: boolean;
+  /** Summary LLM provider preset id. */
+  summary_llm_provider: SummaryLlmProvider | string;
+  /** Effective OpenAI-compatible base URL (preset default when not overridden). */
+  summary_llm_base_url: string;
+  /** Effective model name (preset recommendation when not overridden). */
+  summary_llm_model: string;
   tos_configured: boolean;
   tos_region: string;
   tos_bucket: string;
@@ -22,8 +39,14 @@ export type SettingsUpdate = {
   context_text?: string;
   /** Write-only Doubao new-console API Key; never returned by settings_get. */
   doubao_api_key?: string;
-  /** Write-only DashScope API key; never returned by settings_get. */
-  dashscope_api_key?: string;
+  /** Write-only summary LLM API key; never returned by settings_get. */
+  summary_llm_api_key?: string;
+  /** Known preset id; switching without a base URL / model resets them to preset defaults. */
+  summary_llm_provider?: SummaryLlmProvider;
+  /** Must start with http:// or https://. */
+  summary_llm_base_url?: string;
+  /** Must be non-empty. */
+  summary_llm_model?: string;
   /** Write-only TOS Access Key Id; never returned by settings_get. */
   tos_access_key_id?: string;
   /** Write-only TOS Secret Access Key; never returned by settings_get. */
@@ -50,9 +73,15 @@ export type SettingsTestTosOverrides = {
   tos_endpoint?: string;
 };
 
-/** Optional write-only override for settings_test_dashscope; empty/omit → use keyring. */
-export type SettingsTestDashscopeOverrides = {
-  dashscope_api_key?: string;
+/**
+ * Optional overrides for settings_test_summary_llm; empty/omit → use saved.
+ * When provider / base_url differ from the saved ones, api_key is required.
+ */
+export type SettingsTestSummaryLlmOverrides = {
+  api_key?: string;
+  provider?: SummaryLlmProvider;
+  base_url?: string;
+  model?: string;
 };
 
 export type SettingsTestResult = {

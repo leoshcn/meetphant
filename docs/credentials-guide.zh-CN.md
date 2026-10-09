@@ -4,7 +4,7 @@
 
 1. **豆包 ASR**（新版控制台 API Key）— 音频转写  
 2. **火山 TOS**（AK/SK + Region + Bucket）— 音频上传（所有转写都需要）  
-3. **通义千问 / 阿里云百炼 API Key** — 会议摘要  
+3. **摘要模型 API Key**（默认：通义千问 / 阿里云百炼；也可换 DeepSeek、OpenAI 等 OpenAI 兼容服务）— 会议摘要  
 
 > 流程以官方控制台为准；若界面文案略有改动，以控制台实际按钮为准。  
 > 密钥类信息只应粘贴进 Meetphant **设置**，不要发到聊天群、截图公开或提交到 Git。
@@ -17,7 +17,7 @@
 |------|------|---------------------|----------|
 | 转写 | 火山引擎 · 豆包语音 | API Key（新版控制台） | **必须** |
 | 转写音频上传 | 火山引擎 · TOS | Access Key Id、Secret Access Key、Region、Bucket | **必须**（豆包 2.0 只接受音频 URL） |
-| 摘要 | 阿里云百炼 · DashScope | API Key | **必须**（要生成纪要就需要） |
+| 摘要 | 默认阿里云百炼 · DashScope（可换其他 OpenAI 兼容服务） | 服务商、Base URL、API Key、模型 | **必须**（要生成纪要就需要） |
 
 <p align="center">
   <img src="./credentials/overview-credentials.png" alt="Meetphant 三类凭证一览" width="860" />
@@ -27,7 +27,7 @@
   <img src="./screenshots/settings.png" alt="Meetphant 设置页凭证区域" width="860" />
 </p>
 
-Meetphant 里对应三个区块：**豆包凭证**、**火山 TOS**、**通义千问 / DashScope**。填完后建议分别点 **测试连接**。
+Meetphant 里对应三个区块：**豆包凭证**、**火山 TOS**、**摘要模型**。填完后建议分别点 **测试连接**。
 
 ---
 
@@ -149,9 +149,11 @@ TOS 上传鉴权用的是 **火山引擎云账号 Access Key**，不是豆包语
 
 ---
 
-## 第三部分：通义千问 API Key（阿里云百炼 / DashScope）
+## 第三部分：摘要模型（默认：通义千问 / 阿里云百炼 DashScope）
 
-Meetphant 摘要调用 DashScope 兼容接口，模型为 **`qwen3.7-plus`**。你需要的是 **阿里云百炼 API Key**，不是火山引擎密钥。
+Meetphant 摘要通过 **OpenAI 兼容（Chat Completions）接口** 调用大模型。默认服务商为 **阿里云百炼 DashScope**，模型 **`qwen3.7-plus`**；下文 1–4 步说明如何申请百炼 API Key（不是火山引擎密钥）。想换用其他服务商，见本部分末尾「换用其他服务商」。
+
+> 从旧版本升级：已保存的 DashScope Key 会自动沿用，无需重新填写。
 
 <p align="center">
   <img src="./credentials/qwen-apikey-steps.png" alt="通义千问 API Key 申请步骤概览" width="860" />
@@ -197,12 +199,34 @@ Meetphant 摘要调用 DashScope 兼容接口，模型为 **`qwen3.7-plus`**。�
 
 ### 4. 填入 Meetphant 并测试
 
-1. 打开 Meetphant → **设置 → 通义千问 / DashScope**。  
-2. 粘贴 API Key → **保存 API Key**。  
-3. 点 **测试连接**。  
-4. 转写完成的会议即可点 **生成摘要**。
+1. 打开 Meetphant → **设置 → 摘要模型**。
+2. **服务商** 保持「阿里云百炼 DashScope」；Base URL 与模型会自动填好（`https://dashscope.aliyuncs.com/compatible-mode/v1`、`qwen3.7-plus`），一般无需修改。
+3. 粘贴 API Key → **保存配置**。
+4. 点 **测试连接**：Meetphant 会用当前模型发一次极短的请求，同时校验 Base URL、Key 与模型名。
+5. 转写完成的会议即可点 **生成摘要**。
 
-Meetphant 会把 Key 存在本机系统钥匙串，**不会**写进 SQLite，也 **不会** 被 `settings_get` 回传明文。
+Meetphant 会把 Key 存在本机系统钥匙串，**不会**写进 SQLite，也 **不会** 被 `settings_get` 回传明文。服务商、Base URL、模型名保存在本机设置中。
+
+### 5. 换用其他服务商（可选）
+
+只支持 **OpenAI 兼容（Chat Completions）** 接口。在 **服务商** 下拉中选择预设，会自动填入 Base URL 与推荐模型（如有），都可以修改：
+
+| 服务商 | 默认 Base URL | 模型 |
+|--------|---------------|------|
+| 阿里云百炼 DashScope | `https://dashscope.aliyuncs.com/compatible-mode/v1` | 预填 `qwen3.7-plus` |
+| DeepSeek | `https://api.deepseek.com/v1` | 预填 `deepseek-chat` |
+| OpenAI | `https://api.openai.com/v1` | 需自行填写 |
+| Moonshot（Kimi） | `https://api.moonshot.cn/v1` | 需自行填写 |
+| 智谱 BigModel | `https://open.bigmodel.cn/api/paas/v4` | 需自行填写 |
+| 火山方舟（豆包） | `https://ark.cn-beijing.volces.com/api/v3` | 需自行填写（模型名或推理接入点 ID） |
+| 自定义（OpenAI 兼容） | 自行填写，如本地 `http://localhost:11434/v1` | 需自行填写 |
+
+注意：
+
+- 模型名以对应平台控制台 / 文档为准，Meetphant 不会拉取模型列表。
+- Base URL 填到 `/v1`（或平台给出的兼容前缀）即可，Meetphant 会自动拼接 `/chat/completions`。
+- 只保存 **一套** 配置。**切换服务商或修改 Base URL 后，API Key 输入会被清空，必须重新填写** 才能保存或测试——旧 Key 不会被发往新地址。
+- 「清除 API Key」只清除 Key，服务商、Base URL、模型保留。
 
 ---
 
@@ -212,7 +236,7 @@ Meetphant 会把 Key 存在本机系统钥匙串，**不会**写进 SQLite，也
 
 1. **豆包** → 测试连接成功。  
 2. **TOS** → 测试连接成功 → 导入一段音频，应能出转写。  
-3. **DashScope** → 测试连接成功 → 在有转写的会议上点 **生成摘要**。
+3. **摘要模型** → 测试连接成功 → 在有转写的会议上点 **生成摘要**。
 
 | 文件大小 | 需要什么 |
 |----------|----------|
@@ -241,16 +265,25 @@ Meetphant 会把 Key 存在本机系统钥匙串，**不会**写进 SQLite，也
 
 - 所有音频都要经 TOS 上传；请按第二部分配齐 TOS 四项（AK、SK、Region、Bucket）。
 
-### 摘要失败 / DashScope 相关错误
+### 摘要失败 / 摘要模型相关错误
 
-- 是否使用 **华北2（北京）** 创建的 Key。  
-- Key 是否复制完整（含 `sk-` / `sk-ws` 前缀）。  
-- 百炼是否已开通、账户是否欠费、免费额度是否用尽。  
+测试连接或生成摘要失败时，提示会带上服务商名称和 HTTP 状态码：
+
+- 「API Key 无效或无权限」（HTTP 401/403）：Key 是否复制完整、是否属于当前服务商、账户是否欠费。
+- 「接口地址或模型不存在」（HTTP 404）/「请求被拒绝，请检查模型名」（HTTP 400）：核对 Base URL 与模型名拼写。
+- 「无法连接摘要模型服务」：Base URL 是否可访问（本地服务是否已启动、网络 / 代理是否正常）。
+- 「返回的不是 OpenAI 兼容的 Chat Completions 响应」：Base URL 可能指向了网页或非兼容接口。
+
+使用默认 DashScope 时还需检查：
+
+- 是否使用 **华北2（北京）** 创建的 Key。
+- Key 是否复制完整（含 `sk-` / `sk-ws` 前缀）。
+- 百炼是否已开通、账户是否欠费、免费额度是否用尽。
 - 子账号需具备 API Key 管理权限，或改用主账号创建。
 
 ### 安全提醒
 
-- 豆包 API Key、Secret Access Key、百炼 API Key 等同密码。  
+- 豆包 API Key、Secret Access Key、摘要模型 API Key 等同密码。  
 - 不要提交到公开仓库；不要发到群聊。  
 - 泄露后立即在对应控制台 **禁用 / 删除 / 重置** 并在 Meetphant 里重新填写。
 
@@ -273,4 +306,4 @@ Meetphant 会把 Key 存在本机系统钥匙串，**不会**写进 SQLite，也
 
 ---
 
-文档版本：与 Meetphant 设置页字段对齐（豆包 API Key、TOS AK·SK·Region·Bucket、DashScope API Key）。若平台控制台改版，以官方文档与控制台实时界面为准。
+文档版本：与 Meetphant 设置页字段对齐（豆包 API Key、TOS AK·SK·Region·Bucket、摘要模型 服务商·Base URL·API Key·模型）。若平台控制台改版，以官方文档与控制台实时界面为准。

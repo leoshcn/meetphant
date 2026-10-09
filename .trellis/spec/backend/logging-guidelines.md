@@ -69,7 +69,7 @@ span.record("meeting_id", tracing::field::display(&ctx.meeting_id));
 
 ## Forbidden — never log
 
-- API keys and tokens: Doubao `X-Api-Key`, DashScope key, TOS AK/SK
+- API keys and tokens: Doubao `X-Api-Key`, summary LLM key (`LlmConfig` / `SummaryLlmCredentials` `Debug` redact it), TOS AK/SK
 - Pre-signed URLs (`audio_url`) or any `X-Tos-Signature` query
 - Request or response bodies, transcript text, summary text, `context_text`, hotwords
 - `AppErrorDto.message`

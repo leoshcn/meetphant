@@ -28,7 +28,7 @@ Meetphant 是一款本地优先的桌面会议助手：录制麦克风 + 系统�
 
 - **录音**：WASAPI loopback 混录 → M4A（有 FFmpeg）或 WAV 兜底
 - **转写**：豆包录音文件识别模型 2.0（`volc.seedasr.auc`）· 所有音频经 TOS 上传后异步识别（最长轮询 45 分钟）
-- **摘要**：DashScope / 通义千问 `qwen3.7-plus`，输出要点、待办、决策
+- **摘要**：任意 OpenAI 兼容大模型（预设：默认 DashScope / 通义千问 `qwen3.7-plus`、DeepSeek、OpenAI、Moonshot、智谱、火山方舟，或自定义 Base URL），输出要点、待办、决策
 - **工作区**：侧栏会议列表 + 转写 / 摘要分栏（窄屏自动切 Tab）
 - **设置**：凭证、热词、摘要上下文、录音目录、FFmpeg 状态
 
@@ -57,7 +57,7 @@ Vite 会在 `http://localhost:1420` 启动，并打开 Meetphant 窗口。
 |------|------|----------|
 | 转写 | 豆包 | API Key（豆包语音新版控制台） |
 | 转写音频上传（必需） | 火山引擎 TOS | AK/SK（钥匙串）+ region / bucket |
-| 摘要 | 通义千问 / DashScope | API Key |
+| 摘要 | 通义千问 / DashScope（默认）或其他 OpenAI 兼容服务 | 服务商、Base URL、API Key、模型 |
 
 凭证经系统钥匙串保存，**不会**写入 SQLite，也**不会**被 `settings_get` 回传。
 

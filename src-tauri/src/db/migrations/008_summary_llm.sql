@@ -1,0 +1,2 @@
+-- Summary LLM provider columns on settings (summary_llm_provider / summary_llm_base_url / summary_llm_model).
+-- Placeholder so migration numbering is visible in tree; see ensure_summary_llm_columns.

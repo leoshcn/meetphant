@@ -99,7 +99,7 @@ impl AppErrorDto {
     pub fn summary_not_configured() -> Self {
         Self::new(
             "SUMMARY_NOT_CONFIGURED",
-            "DashScope API key is not configured",
+            "摘要模型服务未配置 API Key，请先在设置中配置",
         )
     }
 

@@ -12,9 +12,16 @@ pub struct Settings {
     /// True when a Doubao API key is present in the OS keyring.
     /// Secrets themselves are never returned over IPC.
     pub doubao_configured: bool,
-    /// True when a DashScope API key is present in the OS keyring.
+    /// True when a summary LLM API key is present in the OS keyring.
     /// The key itself is never returned over IPC.
-    pub dashscope_configured: bool,
+    pub summary_llm_configured: bool,
+    /// Summary LLM provider preset id (`dashscope`, `deepseek`, `openai`,
+    /// `moonshot`, `zhipu`, `ark`, `custom`).
+    pub summary_llm_provider: String,
+    /// Effective OpenAI-compatible base URL (stored value, or the preset default when empty).
+    pub summary_llm_base_url: String,
+    /// Effective model name (stored value, or the preset's recommended model when empty).
+    pub summary_llm_model: String,
     /// True when TOS AK+SK (keyring) and region+bucket (SQLite) are all present.
     /// AK/SK themselves are never returned over IPC.
     pub tos_configured: bool,
@@ -38,7 +45,10 @@ impl Default for Settings {
             hotwords: Vec::new(),
             context_text: String::new(),
             doubao_configured: false,
-            dashscope_configured: false,
+            summary_llm_configured: false,
+            summary_llm_provider: String::new(),
+            summary_llm_base_url: String::new(),
+            summary_llm_model: String::new(),
             tos_configured: false,
             tos_region: String::new(),
             tos_bucket: String::new(),
@@ -56,8 +66,14 @@ pub struct SettingsUpdate {
     pub context_text: Option<String>,
     /// Write-only Doubao new-console API Key (never echoed by settings_get).
     pub doubao_api_key: Option<String>,
-    /// Write-only DashScope API key (never echoed by settings_get).
-    pub dashscope_api_key: Option<String>,
+    /// Write-only summary LLM API key (never echoed by settings_get).
+    pub summary_llm_api_key: Option<String>,
+    /// Summary LLM provider preset id; must be a known preset.
+    pub summary_llm_provider: Option<String>,
+    /// OpenAI-compatible base URL; must start with `http://` or `https://`.
+    pub summary_llm_base_url: Option<String>,
+    /// Model name; must be non-empty.
+    pub summary_llm_model: Option<String>,
     /// Write-only TOS Access Key Id (never echoed by settings_get).
     pub tos_access_key_id: Option<String>,
     /// Write-only TOS Secret Access Key (never echoed by settings_get).

@@ -21,11 +21,11 @@ Applies when adding or changing any `#[tauri::command]`, frontend `invoke` wrapp
 | `settings_get` | (none) | `Settings` | `src-tauri/src/commands/settings.rs` |
 | `settings_update` | `SettingsUpdate` | `Settings` | same |
 | `settings_clear_doubao_credentials` | (none) | `Settings` | same |
-| `settings_clear_dashscope_credentials` | (none) | `Settings` | same |
+| `settings_clear_summary_llm_credentials` | (none) | `Settings` | same — clears only the summary LLM API key (keyring); provider / base URL / model are kept |
 | `settings_clear_tos_credentials` | (none) | `Settings` | same |
 | `settings_test_doubao` | optional `{ doubao_api_key? }` | `{ ok: true }` | same — merges overrides with keyring; **does not persist** |
 | `settings_test_tos` | optional `{ tos_access_key_id?, tos_secret_access_key?, tos_region?, tos_bucket?, tos_endpoint? }` | `{ ok: true }` | same — merges with keyring/SQLite; HeadBucket probe; **does not persist** |
-| `settings_test_dashscope` | optional `{ dashscope_api_key? }` | `{ ok: true }` | same — merges with keyring; GET `/compatible-mode/v1/models`; **does not persist** |
+| `settings_test_summary_llm` | optional `{ api_key?, provider?, base_url?, model? }` | `{ ok: true }` | same — merges with keyring/SQLite; POST `{base_url}/chat/completions` with the configured model, one `ping` user message, output cap 1 token (`max_tokens`; `max_completion_tokens` for `openai`); if merged provider/base URL differ from saved, `api_key` is required (saved key never sent to a new endpoint); **does not persist** |
 | `meetings_create` | (none) | `Meeting` (draft: `title` =「未命名项目」, `source_path` = `""`) | `src-tauri/src/commands/meetings.rs` |
 | `meetings_create_from_file` | `{ path: string }` | `Meeting` | `src-tauri/src/commands/meetings.rs` |
 | `meetings_attach_source` | `{ meeting_id: string, path: string }` | `Meeting` — only when draft (`source_path` empty); keeps custom title, else file stem | same |
@@ -76,7 +76,14 @@ type Settings = {
   hotwords: string[];
   context_text: string;
   doubao_configured: boolean;
-  dashscope_configured: boolean;
+  /** True when a summary LLM API key is in the keyring (key never returned). */
+  summary_llm_configured: boolean;
+  /** Preset id: dashscope | deepseek | openai | moonshot | zhipu | ark | custom. */
+  summary_llm_provider: string;
+  /** Effective base URL (stored value, else preset default). */
+  summary_llm_base_url: string;
+  /** Effective model (stored value, else preset recommendation; may be "" only if unconfigured). */
+  summary_llm_model: string;
   /** True when TOS AK+SK (keyring) and region+bucket (SQLite) are all present. */
   tos_configured: boolean;
   /** Non-secret; echoed by settings_get. */
@@ -96,8 +103,14 @@ type SettingsUpdate = {
   context_text?: string;
   /** Write-only Doubao new-console API Key (sent as `X-Api-Key`); never returned by settings_get. */
   doubao_api_key?: string;
-  /** Write-only DashScope API key; never returned by settings_get. */
-  dashscope_api_key?: string;
+  /** Write-only summary LLM API key; never returned by settings_get. */
+  summary_llm_api_key?: string;
+  /** Known preset id. Changing it without base_url/model resets them to the preset defaults. */
+  summary_llm_provider?: string;
+  /** Must be an http(s):// URL with a host; "" is rejected. */
+  summary_llm_base_url?: string;
+  /** Must be non-empty. */
+  summary_llm_model?: string;
   /** Write-only TOS Access Key Id; never returned by settings_get. */
   tos_access_key_id?: string;
   /** Write-only TOS Secret Access Key; never returned by settings_get. */
@@ -121,8 +134,11 @@ type SettingsTestTosOverrides = {
   tos_bucket?: string;
   tos_endpoint?: string;
 };
-type SettingsTestDashscopeOverrides = {
-  dashscope_api_key?: string;
+type SettingsTestSummaryLlmOverrides = {
+  api_key?: string;
+  provider?: string;
+  base_url?: string;
+  model?: string;
 };
 type SettingsTestResult = { ok: true };
 type Meeting = {
@@ -168,11 +184,12 @@ type Summary = {
 | Field | Consumer | Must NOT |
 |-------|----------|----------|
 | `hotwords` | Doubao Seed-ASR 2.0 submit (`request.corpus.context`) | Be required for summary |
-| `context_text` | Qwen summarizer | Be sent to Doubao ASR |
+| `context_text` | Summary LLM prompt | Be sent to Doubao ASR |
 | `doubao_api_key` | OS keyring via `settings_update`; sent only as `X-Api-Key` | Appear in any `settings_get` / logs |
 | `doubao_configured` | UI status only | Imply returning secret material |
-| `dashscope_api_key` | OS keyring via `settings_update` | Appear in any `settings_get` / logs |
-| `dashscope_configured` | UI status only | Imply returning secret material |
+| `summary_llm_api_key` | OS keyring via `settings_update`; sent only as `Authorization: Bearer` to the configured base URL | Appear in any `settings_get` / logs / error messages; follow a provider or base URL change without being re-entered |
+| `summary_llm_configured` | UI status only | Imply returning secret material |
+| `summary_llm_provider` / `summary_llm_base_url` / `summary_llm_model` | SQLite + summary client | Store secrets |
 | `tos_access_key_id` / `tos_secret_access_key` | OS keyring via `settings_update` | Appear in any `settings_get` / logs |
 | `tos_configured` | UI status only | Imply returning AK/SK |
 | `tos_region` / `tos_bucket` / `tos_endpoint` | SQLite + TOS client | Store secrets |
@@ -182,16 +199,32 @@ type Summary = {
 | Store | Rule |
 |-------|------|
 | OS keyring (`meetphant` / `doubao_api_key`) | Write via settings; read only inside provider. Old-console `doubao_app_id` / `doubao_access_token` are unsupported and deleted on startup |
-| OS keyring (`meetly` / `dashscope_api_key`) | Write via settings; read only inside Qwen provider |
+| OS keyring (`meetphant` / `summary_llm_api_key`) | Write via settings; read by summary service / test merge only. On startup, if empty, copied from `dashscope_api_key` (`meetphant`, then legacy `meetly`); the old entry is **kept** for rollback. `settings_clear_summary_llm_credentials` also deletes the old `dashscope_api_key` entries so a cleared key is not re-migrated |
 | OS keyring (`meetly` / `tos_access_key_id`, `tos_secret_access_key`) | Write via settings; read only inside TOS provider |
-| SQLite `settings` | Never stores Doubao, DashScope, or TOS secrets; may store `tos_region` / `tos_bucket` / `tos_endpoint` |
+| SQLite `settings` | Never stores Doubao, summary LLM, or TOS secrets; may store `tos_region` / `tos_bucket` / `tos_endpoint` and `summary_llm_provider` / `summary_llm_base_url` / `summary_llm_model` |
+
+### Summary LLM providers
+
+All presets use the OpenAI Chat Completions protocol (`POST {base_url}/chat/completions`, trailing `/` tolerated). Source of truth: `src-tauri/src/providers/openai_compat/presets.rs`; UI mirror: `src/features/settings-credentials/summaryLlm.ts`.
+
+| id | Default base URL | Default model | `response_format: json_object` | Extra body |
+|----|------------------|---------------|-------------------------------|------------|
+| `dashscope` (default) | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen3.7-plus` | yes | `enable_thinking: false` |
+| `deepseek` | `https://api.deepseek.com/v1` | `deepseek-chat` | yes | — |
+| `openai` | `https://api.openai.com/v1` | (user fills) | yes | — |
+| `moonshot` | `https://api.moonshot.cn/v1` | (user fills) | yes | — |
+| `zhipu` | `https://open.bigmodel.cn/api/paas/v4` | (user fills) | yes | — |
+| `ark` | `https://ark.cn-beijing.volces.com/api/v3` | (user fills) | no | — |
+| `custom` | (user fills) | (user fills) | no | — |
+
+Empty stored `summary_llm_base_url` / `summary_llm_model` resolve to the preset defaults, so upgraded installs keep DashScope + `qwen3.7-plus`. Unknown stored provider ids resolve to `custom`. Responses wrapped in a ```json fence are accepted.
 
 `tos_configured === true` only when AK, SK, region, and bucket are all present (endpoint optional).  
 `settings_clear_tos_credentials` clears keyring secrets and wipes region/bucket/endpoint.
 
 ### DB
 
-- `settings` singleton (`id = 1`): `hotwords`, `context_text`, plus TOS non-secrets — `001_settings.sql` + idempotent `004` / `ensure_tos_settings_columns`
+- `settings` singleton (`id = 1`): `hotwords`, `context_text`, plus TOS non-secrets — `001_settings.sql` + idempotent `004` / `ensure_tos_settings_columns`; summary LLM non-secrets — idempotent `008` / `ensure_summary_llm_columns`
 - `meetings`, `jobs`, `transcripts` — `002_meetings_jobs.sql` (`jobs.provider_task_id` used for Doubao async request id)
 - `transcripts.segments_json` / `speaker_names_json` — idempotent via `ensure_transcript_speaker_columns` (`005_transcript_speakers.sql`)
 - `summaries` — `003_summaries.sql`
@@ -232,9 +265,11 @@ Async poll window: **45 minutes** client-side (`ASR_TIMEOUT` on exceed). Pre-sig
 | Cannot read audio file | `IO_ERROR` | Safe message |
 | Provider non-success (submit / query) | `ASR_PROVIDER_ERROR` | Job → `failed` |
 | Async poll exceeds 45 min | `ASR_TIMEOUT` | Job → `failed` |
-| Transcript missing / not ready for summary | `SUMMARY_NOT_READY` | No Qwen call |
-| Missing DashScope API key | `SUMMARY_NOT_CONFIGURED` | No Qwen call |
-| Qwen API / JSON parse failure | `SUMMARY_PROVIDER_ERROR` | No partial persist |
+| Transcript missing / not ready for summary | `SUMMARY_NOT_READY` | No LLM call |
+| Missing summary LLM API key (or empty effective base URL / model) | `SUMMARY_NOT_CONFIGURED` | No LLM call |
+| Unknown `summary_llm_provider`; `summary_llm_base_url` empty / not `http(s)://` with host; `summary_llm_model` empty | `SETTINGS_INVALID` (`details.field`) | No DB or keyring write |
+| Provider / base URL change while a key is saved, without a new key (`settings_update` / `settings_test_summary_llm`) | `SETTINGS_INVALID` (`details.field = summary_llm_api_key`) | No write / no request |
+| Summary LLM HTTP / network / JSON failure | `SUMMARY_PROVIDER_ERROR` | Message names the provider label; 401/403 →「API Key 无效或无权限」; other statuses include `HTTP <code>` (+ short upstream `error.message`, key redacted; never for 401/403); `details.http_status`; no partial persist |
 | Unknown meeting/job/summary id | `NOT_FOUND` | — |
 | Lock poisoned / unknown | `INTERNAL` | Safe message |
 
@@ -245,15 +280,15 @@ Async poll window: **45 minutes** client-side (`ASR_TIMEOUT` on exceed). Pre-sig
 | Case | Expect |
 |------|--------|
 | Good | Import with TOS → TOS upload → Seed-ASR 2.0 job → transcript → summary |
-| Base | Empty DB → settings defaults + all `*_configured: false` + empty TOS non-secret fields |
-| Bad | `hotwords: [""]` → `SETTINGS_INVALID`; no Doubao → `ASR_NOT_CONFIGURED`; any file without TOS → `TOS_NOT_CONFIGURED`; no DashScope → `SUMMARY_NOT_CONFIGURED` |
+| Base | Empty DB → settings defaults + all `*_configured: false` + empty TOS non-secret fields + `summary_llm_provider = dashscope` with DashScope base URL / `qwen3.7-plus` |
+| Bad | `hotwords: [""]` → `SETTINGS_INVALID`; no Doubao → `ASR_NOT_CONFIGURED`; any file without TOS → `TOS_NOT_CONFIGURED`; no summary key → `SUMMARY_NOT_CONFIGURED`; `summary_llm_base_url: "ftp://x"` → `SETTINGS_INVALID` |
 
 ---
 
 ## Tests Required
 
-- Rust: settings (incl. Doubao / DashScope / TOS configured flags, no secret echo), hotwords builder, auth header (`X-Api-Key` only), Seed-ASR resource id, probe classification, async stub job transitions (small + large file via TOS, no-TOS rejection), TOS stub put/presign, async poll timeout → `ASR_TIMEOUT`, summary prompt/parse with stub Qwen.
-- TS: ipc wrappers for settings (incl. `settings_clear_tos_credentials`, `settings_test_*`) / meetings / jobs / summary.
+- Rust: settings (incl. Doubao / summary LLM / TOS configured flags, no secret echo), summary LLM validation + endpoint-change key rule + preset defaults on upgrade, keyring copy-migration, hotwords builder, auth header (`X-Api-Key` only), Seed-ASR resource id, probe classification, async stub job transitions (small + large file via TOS, no-TOS rejection), TOS stub put/presign, async poll timeout → `ASR_TIMEOUT`, summary prompt/parse with stub generator, chat URL join, per-preset body (`response_format` / `enable_thinking`), local HTTP server tests for generate / test connection status mapping.
+- TS: ipc wrappers for settings (incl. `settings_clear_tos_credentials`, `settings_clear_summary_llm_credentials`, `settings_test_*`) / meetings / jobs / summary; summary LLM preset mirror + endpoint-change helper.
 
 ---
 

@@ -2,11 +2,12 @@ export { invokeCommand, normalizeError, isAppError } from "./client";
 export type { AppError } from "./client";
 export type {
   ThemePreference,
+  SummaryLlmProvider,
   Settings,
   SettingsUpdate,
   SettingsTestDoubaoOverrides,
   SettingsTestTosOverrides,
-  SettingsTestDashscopeOverrides,
+  SettingsTestSummaryLlmOverrides,
   SettingsTestResult,
   HealthResponse,
   Meeting,
@@ -28,11 +29,11 @@ export {
   settingsGet,
   settingsUpdate,
   settingsClearDoubaoCredentials,
-  settingsClearDashscopeCredentials,
+  settingsClearSummaryLlmCredentials,
   settingsClearTosCredentials,
   settingsTestDoubao,
   settingsTestTos,
-  settingsTestDashscope,
+  settingsTestSummaryLlm,
 } from "./commands/settings";
 export {
   meetingsCreate,

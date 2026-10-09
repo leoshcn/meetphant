@@ -5,6 +5,7 @@ use crate::models::{
     Settings, SettingsUpdate, THEME_PREFERENCE_DARK, THEME_PREFERENCE_LIGHT,
     THEME_PREFERENCE_SYSTEM,
 };
+use crate::providers::openai_compat::presets::{self, DEFAULT_PROVIDER_ID};
 use crate::services::credentials;
 
 /// Max length of a single hotword (characters).
@@ -38,9 +39,231 @@ fn compute_tos_configured(region: &str, bucket: &str) -> bool {
         && !bucket.trim().is_empty()
 }
 
-fn with_configured(mut settings: Settings) -> Settings {
+/// Summary LLM columns exactly as stored in SQLite (empty = preset default).
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct StoredSummaryLlm {
+    provider: String,
+    base_url: String,
+    model: String,
+}
+
+impl Default for StoredSummaryLlm {
+    fn default() -> Self {
+        Self {
+            provider: DEFAULT_PROVIDER_ID.to_string(),
+            base_url: String::new(),
+            model: String::new(),
+        }
+    }
+}
+
+/// Effective (provider id, base URL, model) after applying preset defaults.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EffectiveSummaryLlm {
+    pub provider: String,
+    pub base_url: String,
+    pub model: String,
+}
+
+impl EffectiveSummaryLlm {
+    pub fn from_settings(settings: &Settings) -> Self {
+        Self {
+            provider: settings.summary_llm_provider.clone(),
+            base_url: settings.summary_llm_base_url.clone(),
+            model: settings.summary_llm_model.clone(),
+        }
+    }
+}
+
+fn resolve_summary_llm(stored: &StoredSummaryLlm) -> EffectiveSummaryLlm {
+    let preset = presets::resolve_preset(&stored.provider);
+    let base_url = match stored.base_url.trim() {
+        "" => preset.default_base_url.to_string(),
+        url => url.to_string(),
+    };
+    let model = match stored.model.trim() {
+        "" => preset.default_model.unwrap_or_default().to_string(),
+        model => model.to_string(),
+    };
+    EffectiveSummaryLlm {
+        provider: preset.id.to_string(),
+        base_url,
+        model,
+    }
+}
+
+fn read_stored_summary_llm(conn: &Connection) -> CmdResult<StoredSummaryLlm> {
+    let row = conn.query_row(
+        "SELECT summary_llm_provider, summary_llm_base_url, summary_llm_model
+         FROM settings WHERE id = 1",
+        [],
+        |row| {
+            Ok(StoredSummaryLlm {
+                provider: row.get(0)?,
+                base_url: row.get(1)?,
+                model: row.get(2)?,
+            })
+        },
+    );
+    match row {
+        Ok(stored) => Ok(stored),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(StoredSummaryLlm::default()),
+        Err(err) => Err(AppErrorDto::from(err)),
+    }
+}
+
+/// Validate a summary base URL: absolute `http(s)://` URL with a host.
+pub fn validate_summary_llm_base_url(raw: &str) -> CmdResult<()> {
+    let invalid = || {
+        AppErrorDto::with_details(
+            "SETTINGS_INVALID",
+            "Base URL 必须以 http:// 或 https:// 开头",
+            serde_json::json!({ "field": "summary_llm_base_url" }),
+        )
+    };
+    let trimmed = raw.trim();
+    if trimmed.is_empty() || trimmed.chars().any(char::is_whitespace) {
+        return Err(invalid());
+    }
+    let url = reqwest::Url::parse(trimmed).map_err(|_| invalid())?;
+    let scheme_ok = matches!(url.scheme(), "http" | "https");
+    let host_ok = url.host_str().map(|h| !h.is_empty()).unwrap_or(false);
+    if !scheme_ok || !host_ok {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
+/// Validate a summary model name (non-empty after trim).
+pub fn validate_summary_llm_model(raw: &str) -> CmdResult<()> {
+    if raw.trim().is_empty() {
+        return Err(AppErrorDto::with_details(
+            "SETTINGS_INVALID",
+            "模型名不能为空",
+            serde_json::json!({ "field": "summary_llm_model" }),
+        ));
+    }
+    Ok(())
+}
+
+/// Validate a provider id; only known presets are accepted.
+pub fn validate_summary_llm_provider(raw: &str) -> CmdResult<&'static str> {
+    presets::find_preset(raw).map(|p| p.id).ok_or_else(|| {
+        AppErrorDto::with_details(
+            "SETTINGS_INVALID",
+            "未知的摘要模型服务商",
+            serde_json::json!({ "field": "summary_llm_provider" }),
+        )
+    })
+}
+
+/// Comparable form of a base URL (trim + drop trailing `/`).
+pub fn normalize_base_url(raw: &str) -> &str {
+    raw.trim().trim_end_matches('/')
+}
+
+/// True when moving from `current` to `next` would send a key to a different endpoint.
+pub fn summary_llm_endpoint_changed(
+    current: &EffectiveSummaryLlm,
+    next: &EffectiveSummaryLlm,
+) -> bool {
+    current.provider != next.provider
+        || normalize_base_url(&current.base_url) != normalize_base_url(&next.base_url)
+}
+
+fn non_empty(value: &Option<String>) -> bool {
+    value
+        .as_ref()
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false)
+}
+
+/// Validate summary LLM fields of an update without writing.
+/// Returns the new stored row when any summary LLM non-secret field is present.
+fn plan_summary_llm_update(
+    conn: &Connection,
+    update: &SettingsUpdate,
+) -> CmdResult<Option<StoredSummaryLlm>> {
+    let touched = update.summary_llm_provider.is_some()
+        || update.summary_llm_base_url.is_some()
+        || update.summary_llm_model.is_some();
+    if !touched {
+        return Ok(None);
+    }
+
+    let stored = read_stored_summary_llm(conn)?;
+    let current = resolve_summary_llm(&stored);
+
+    let provider = match update.summary_llm_provider.as_deref() {
+        Some(raw) => validate_summary_llm_provider(raw)?.to_string(),
+        None => current.provider.clone(),
+    };
+    let provider_changed = provider != current.provider;
+
+    // Explicit empty values are rejected (R5); omitted fields keep the stored
+    // value, or reset to the new preset's default when the provider changes (D2).
+    let base_url = match update.summary_llm_base_url.as_deref() {
+        Some(raw) => {
+            validate_summary_llm_base_url(raw)?;
+            raw.trim().to_string()
+        }
+        None if provider_changed => String::new(),
+        None => stored.base_url.trim().to_string(),
+    };
+    let model = match update.summary_llm_model.as_deref() {
+        Some(raw) => {
+            validate_summary_llm_model(raw)?;
+            raw.trim().to_string()
+        }
+        None if provider_changed => String::new(),
+        None => stored.model.trim().to_string(),
+    };
+
+    let next_stored = StoredSummaryLlm {
+        provider,
+        base_url,
+        model,
+    };
+    let next = resolve_summary_llm(&next_stored);
+    validate_summary_llm_base_url(&next.base_url)?;
+    validate_summary_llm_model(&next.model)?;
+
+    // D5: never let a saved key follow the user to a different endpoint.
+    if summary_llm_endpoint_changed(&current, &next)
+        && credentials::is_summary_llm_configured()
+        && !non_empty(&update.summary_llm_api_key)
+    {
+        return Err(AppErrorDto::with_details(
+            "SETTINGS_INVALID",
+            "切换服务商或修改 Base URL 后需重新填写 API Key",
+            serde_json::json!({ "field": "summary_llm_api_key" }),
+        ));
+    }
+
+    Ok(Some(next_stored))
+}
+
+fn persist_summary_llm_row(conn: &Connection, stored: &StoredSummaryLlm) -> CmdResult<()> {
+    conn.execute(
+        "INSERT INTO settings (id, summary_llm_provider, summary_llm_base_url, summary_llm_model)
+         VALUES (1, ?1, ?2, ?3)
+         ON CONFLICT(id) DO UPDATE SET
+           summary_llm_provider = excluded.summary_llm_provider,
+           summary_llm_base_url = excluded.summary_llm_base_url,
+           summary_llm_model = excluded.summary_llm_model",
+        rusqlite::params![stored.provider, stored.base_url, stored.model],
+    )
+    .map_err(AppErrorDto::from)?;
+    Ok(())
+}
+
+fn with_configured(mut settings: Settings, stored_llm: &StoredSummaryLlm) -> Settings {
     settings.doubao_configured = credentials::is_configured();
-    settings.dashscope_configured = credentials::is_dashscope_configured();
+    settings.summary_llm_configured = credentials::is_summary_llm_configured();
+    let llm = resolve_summary_llm(stored_llm);
+    settings.summary_llm_provider = llm.provider;
+    settings.summary_llm_base_url = llm.base_url;
+    settings.summary_llm_model = llm.model;
     settings.tos_configured = compute_tos_configured(&settings.tos_region, &settings.tos_bucket);
     settings.recording_dir_resolved =
         crate::services::recording_service::resolve_recording_dir(&settings.recording_dir)
@@ -113,21 +336,25 @@ pub fn get_settings(conn: &Connection) -> CmdResult<Settings> {
                 serde_json::from_str(&hotwords_json).map_err(AppErrorDto::from)?;
             let theme_preference = validate_theme_preference(&theme_preference)
                 .unwrap_or_else(|_| THEME_PREFERENCE_SYSTEM.to_string());
-            Ok(with_configured(Settings {
-                hotwords,
-                context_text,
-                doubao_configured: false,
-                dashscope_configured: false,
-                tos_configured: false,
-                tos_region,
-                tos_bucket,
-                tos_endpoint,
-                recording_dir,
-                recording_dir_resolved: String::new(),
-                theme_preference,
-            }))
+            let stored_llm = read_stored_summary_llm(conn)?;
+            Ok(with_configured(
+                Settings {
+                    hotwords,
+                    context_text,
+                    tos_region,
+                    tos_bucket,
+                    tos_endpoint,
+                    recording_dir,
+                    theme_preference,
+                    ..Settings::default()
+                },
+                &stored_llm,
+            ))
         }
-        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(with_configured(Settings::default())),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(with_configured(
+            Settings::default(),
+            &StoredSummaryLlm::default(),
+        )),
         Err(err) => Err(AppErrorDto::from(err)),
     }
 }
@@ -140,10 +367,10 @@ fn apply_credential_update(update: &SettingsUpdate) -> CmdResult<()> {
         }
     }
 
-    if let Some(ref key) = update.dashscope_api_key {
+    if let Some(ref key) = update.summary_llm_api_key {
         let trimmed = key.trim();
         if !trimmed.is_empty() {
-            credentials::set_dashscope_credentials(trimmed)?;
+            credentials::set_summary_llm_credentials(trimmed)?;
         }
     }
 
@@ -216,6 +443,7 @@ pub fn update_settings(conn: &Connection, update: SettingsUpdate) -> CmdResult<S
     } else {
         None
     };
+    let summary_llm_planned = plan_summary_llm_update(conn, &update)?;
     apply_credential_update(&update)?;
 
     let mut current = get_settings(conn)?;
@@ -246,6 +474,9 @@ pub fn update_settings(conn: &Connection, update: SettingsUpdate) -> CmdResult<S
     }
 
     persist_settings_row(conn, &current)?;
+    if let Some(ref stored) = summary_llm_planned {
+        persist_summary_llm_row(conn, stored)?;
+    }
     get_settings(conn)
 }
 
@@ -254,8 +485,9 @@ pub fn clear_doubao_credentials(conn: &Connection) -> CmdResult<Settings> {
     get_settings(conn)
 }
 
-pub fn clear_dashscope_credentials(conn: &Connection) -> CmdResult<Settings> {
-    credentials::clear_dashscope_credentials()?;
+/// Clear only the summary LLM API key; provider / base URL / model are kept.
+pub fn clear_summary_llm_credentials(conn: &Connection) -> CmdResult<Settings> {
+    credentials::clear_summary_llm_credentials()?;
     get_settings(conn)
 }
 
@@ -283,7 +515,13 @@ mod tests {
         assert_eq!(settings.hotwords, Vec::<String>::new());
         assert_eq!(settings.context_text, "");
         assert!(!settings.doubao_configured);
-        assert!(!settings.dashscope_configured);
+        assert!(!settings.summary_llm_configured);
+        assert_eq!(settings.summary_llm_provider, "dashscope");
+        assert_eq!(
+            settings.summary_llm_base_url,
+            "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        );
+        assert_eq!(settings.summary_llm_model, "qwen3.7-plus");
         assert!(!settings.tos_configured);
         assert_eq!(settings.tos_region, "");
         assert_eq!(settings.tos_bucket, "");
@@ -417,25 +655,248 @@ mod tests {
     }
 
     #[test]
-    fn dashscope_configured_flag_without_leaking_key() {
+    fn summary_llm_configured_flag_without_leaking_key() {
         reset_for_test();
         let conn = crate::db::pool::open_memory().expect("memory db");
         let updated = update_settings(
             &conn,
             SettingsUpdate {
-                dashscope_api_key: Some("sk-dash-secret".into()),
+                summary_llm_api_key: Some("sk-dash-secret".into()),
                 ..Default::default()
             },
         )
         .expect("creds");
 
-        assert!(updated.dashscope_configured);
+        assert!(updated.summary_llm_configured);
         let json = serde_json::to_string(&updated).expect("ser");
         assert!(!json.contains("sk-dash-secret"));
-        assert!(json.contains("dashscope_configured"));
+        assert!(json.contains("summary_llm_configured"));
+        assert!(!json.contains("api_key"));
 
-        let cleared = clear_dashscope_credentials(&conn).expect("clear");
-        assert!(!cleared.dashscope_configured);
+        let cleared = clear_summary_llm_credentials(&conn).expect("clear");
+        assert!(!cleared.summary_llm_configured);
+        // Clearing the key keeps provider / base URL / model.
+        assert_eq!(cleared.summary_llm_provider, "dashscope");
+    }
+
+    #[test]
+    fn upgraded_install_with_legacy_key_keeps_dashscope_defaults() {
+        reset_for_test();
+        credentials::seed_legacy_dashscope_key_for_test("sk-legacy");
+        credentials::migrate_legacy_credentials();
+        let conn = crate::db::pool::open_memory().expect("memory db");
+        let settings = get_settings(&conn).expect("get");
+        assert!(settings.summary_llm_configured);
+        assert_eq!(settings.summary_llm_provider, "dashscope");
+        assert_eq!(
+            settings.summary_llm_base_url,
+            "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        );
+        assert_eq!(settings.summary_llm_model, "qwen3.7-plus");
+        assert!(!serde_json::to_string(&settings)
+            .unwrap()
+            .contains("sk-legacy"));
+    }
+
+    fn summary_llm_row(conn: &Connection) -> (String, String, String) {
+        conn.query_row(
+            "SELECT summary_llm_provider, summary_llm_base_url, summary_llm_model
+             FROM settings WHERE id = 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .unwrap_or_default()
+    }
+
+    #[test]
+    fn summary_llm_switch_to_deepseek_persists_config() {
+        reset_for_test();
+        let conn = crate::db::pool::open_memory().expect("memory db");
+        let updated = update_settings(
+            &conn,
+            SettingsUpdate {
+                summary_llm_provider: Some("deepseek".into()),
+                summary_llm_base_url: Some(" https://api.deepseek.com/v1/ ".into()),
+                summary_llm_model: Some(" deepseek-chat ".into()),
+                summary_llm_api_key: Some("sk-deepseek".into()),
+                ..Default::default()
+            },
+        )
+        .expect("update");
+        assert_eq!(updated.summary_llm_provider, "deepseek");
+        assert_eq!(updated.summary_llm_base_url, "https://api.deepseek.com/v1/");
+        assert_eq!(updated.summary_llm_model, "deepseek-chat");
+        assert!(updated.summary_llm_configured);
+        assert!(!serde_json::to_string(&updated)
+            .unwrap()
+            .contains("sk-deepseek"));
+
+        // Unrelated updates do not rewrite summary LLM columns.
+        update_settings(
+            &conn,
+            SettingsUpdate {
+                context_text: Some("ctx".into()),
+                ..Default::default()
+            },
+        )
+        .expect("ctx");
+        assert_eq!(
+            summary_llm_row(&conn),
+            (
+                "deepseek".into(),
+                "https://api.deepseek.com/v1/".into(),
+                "deepseek-chat".into()
+            )
+        );
+    }
+
+    #[test]
+    fn summary_llm_provider_switch_resets_to_preset_defaults() {
+        reset_for_test();
+        let conn = crate::db::pool::open_memory().expect("memory db");
+        let updated = update_settings(
+            &conn,
+            SettingsUpdate {
+                summary_llm_provider: Some("deepseek".into()),
+                ..Default::default()
+            },
+        )
+        .expect("provider only, no saved key");
+        assert_eq!(updated.summary_llm_base_url, "https://api.deepseek.com/v1");
+        assert_eq!(updated.summary_llm_model, "deepseek-chat");
+        assert_eq!(summary_llm_row(&conn).1, "");
+
+        // A preset without a recommended model requires one.
+        let err = update_settings(
+            &conn,
+            SettingsUpdate {
+                summary_llm_provider: Some("openai".into()),
+                ..Default::default()
+            },
+        )
+        .expect_err("model required");
+        assert_eq!(err.code, "SETTINGS_INVALID");
+    }
+
+    #[test]
+    fn summary_llm_invalid_values_reject_without_write() {
+        reset_for_test();
+        let conn = crate::db::pool::open_memory().expect("memory db");
+        update_settings(
+            &conn,
+            SettingsUpdate {
+                context_text: Some("keep".into()),
+                ..Default::default()
+            },
+        )
+        .expect("seed");
+        let before = summary_llm_row(&conn);
+
+        let cases: Vec<SettingsUpdate> = vec![
+            SettingsUpdate {
+                summary_llm_base_url: Some("ftp://x".into()),
+                ..Default::default()
+            },
+            SettingsUpdate {
+                summary_llm_base_url: Some("".into()),
+                ..Default::default()
+            },
+            SettingsUpdate {
+                summary_llm_base_url: Some("https://".into()),
+                ..Default::default()
+            },
+            SettingsUpdate {
+                summary_llm_model: Some("   ".into()),
+                ..Default::default()
+            },
+            SettingsUpdate {
+                summary_llm_provider: Some("nope".into()),
+                ..Default::default()
+            },
+            // `custom` has no default base URL, so one must be given.
+            SettingsUpdate {
+                summary_llm_provider: Some("custom".into()),
+                summary_llm_model: Some("m".into()),
+                ..Default::default()
+            },
+        ];
+        for case in cases {
+            let err = update_settings(
+                &conn,
+                SettingsUpdate {
+                    context_text: Some("should-not-write".into()),
+                    summary_llm_api_key: Some("sk-should-not-write".into()),
+                    ..case
+                },
+            )
+            .expect_err("invalid");
+            assert_eq!(err.code, "SETTINGS_INVALID");
+        }
+
+        assert_eq!(summary_llm_row(&conn), before);
+        let loaded = get_settings(&conn).expect("reload");
+        assert_eq!(loaded.context_text, "keep");
+        assert!(!loaded.summary_llm_configured);
+        assert_eq!(loaded.summary_llm_provider, "dashscope");
+    }
+
+    #[test]
+    fn summary_llm_endpoint_change_requires_new_key() {
+        reset_for_test();
+        let conn = crate::db::pool::open_memory().expect("memory db");
+        credentials::set_summary_llm_credentials("sk-old").unwrap();
+
+        let err = update_settings(
+            &conn,
+            SettingsUpdate {
+                summary_llm_provider: Some("deepseek".into()),
+                summary_llm_model: Some("deepseek-chat".into()),
+                ..Default::default()
+            },
+        )
+        .expect_err("provider switch without key");
+        assert_eq!(err.code, "SETTINGS_INVALID");
+
+        let err = update_settings(
+            &conn,
+            SettingsUpdate {
+                summary_llm_base_url: Some("https://proxy.example.com/v1".into()),
+                ..Default::default()
+            },
+        )
+        .expect_err("base url change without key");
+        assert_eq!(err.code, "SETTINGS_INVALID");
+        assert_eq!(
+            get_settings(&conn).unwrap().summary_llm_provider,
+            "dashscope"
+        );
+
+        // Same endpoint (trailing slash only) + model change keeps the key.
+        let ok = update_settings(
+            &conn,
+            SettingsUpdate {
+                summary_llm_base_url: Some(
+                    "https://dashscope.aliyuncs.com/compatible-mode/v1/".into(),
+                ),
+                summary_llm_model: Some("qwen-plus".into()),
+                ..Default::default()
+            },
+        )
+        .expect("model change");
+        assert_eq!(ok.summary_llm_model, "qwen-plus");
+
+        let switched = update_settings(
+            &conn,
+            SettingsUpdate {
+                summary_llm_provider: Some("deepseek".into()),
+                summary_llm_api_key: Some("sk-new".into()),
+                ..Default::default()
+            },
+        )
+        .expect("switch with key");
+        assert_eq!(switched.summary_llm_provider, "deepseek");
+        let saved = credentials::get_summary_llm_credentials().unwrap().unwrap();
+        assert_eq!(saved.api_key, "sk-new");
     }
 
     #[test]

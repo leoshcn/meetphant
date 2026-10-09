@@ -16,7 +16,7 @@ A local-first desktop meeting assistant: capture mic + system audio (or import a
 |---|---|
 | **One-click capture** | Mic + system speaker loopback; stop → auto-create meeting & transcribe |
 | **Or import** | Drop in a local file — uploaded to TOS, then transcribed by Doubao Seed-ASR 2.0 |
-| **Notes you can share** | Qwen turns transcripts into key points, action items, and decisions |
+| **Notes you can share** | An LLM of your choice (Qwen by default) turns transcripts into key points, action items, and decisions |
 | **Local-first** | Meetings & settings in SQLite; secrets stay in the OS keyring |
 | **Hotwords** | Product names and jargon boost ASR accuracy |
 
@@ -28,7 +28,7 @@ A local-first desktop meeting assistant: capture mic + system audio (or import a
 
 - **Recording** — WASAPI loopback mix → M4A when FFmpeg is ready, otherwise WAV without blocking
 - **Transcription** — Doubao Seed-ASR 2.0 (`volc.seedasr.auc`) · every file is uploaded to TOS, then async submit/query (45-minute poll window)
-- **Summary** — DashScope / Qwen `qwen3.7-plus` → key points / action items / decisions
+- **Summary** — any OpenAI-compatible LLM (presets: DashScope `qwen3.7-plus` by default, DeepSeek, OpenAI, Moonshot, Zhipu, Volcengine Ark, or a custom base URL) → key points / action items / decisions
 - **Workspace** — meeting sidebar + split transcript/summary (tabs on narrow windows)
 - **Settings** — credentials, hotwords, summary context, recording folder, FFmpeg status
 
@@ -57,7 +57,7 @@ Configure in **Settings**:
 |------|----------|----------------|
 | Transcription | Doubao | API Key (new speech console) |
 | Audio upload for ASR (required) | Volcengine TOS | AK/SK in keyring + region / bucket |
-| Summary | DashScope / Qwen | API Key |
+| Summary | DashScope (default) or another OpenAI-compatible provider | Provider, Base URL, API Key, model |
 
 Secrets live in the OS credential store only — never in SQLite, never returned by `settings_get`.
 

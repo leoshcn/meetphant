@@ -18,6 +18,8 @@ Migrations:
 
 - Idempotent `theme_preference` via `ensure_theme_preference_column` (`007_theme_preference.sql`)
 
+- Idempotent summary LLM columns via `ensure_summary_llm_columns` (`008_summary_llm.sql`)
+
 
 
 Singleton row `id = 1`:
@@ -42,9 +44,15 @@ Singleton row `id = 1`:
 
 | `theme_preference` | TEXT NOT NULL DEFAULT `'system'` (`system` \| `light` \| `dark`) |
 
+| `summary_llm_provider` | TEXT NOT NULL DEFAULT `'dashscope'` (preset id) |
+
+| `summary_llm_base_url` | TEXT NOT NULL DEFAULT `''` (empty → preset default base URL) |
+
+| `summary_llm_model` | TEXT NOT NULL DEFAULT `''` (empty → preset recommended model) |
 
 
-**Never** store Doubao, DashScope, or TOS AK/SK in SQLite — those live in the OS keyring (`meetly` service).
+
+**Never** store Doubao, summary LLM, or TOS secrets in SQLite — those live in the OS keyring (`meetphant` service; summary key account `summary_llm_api_key`).
 
 
 

@@ -5,8 +5,10 @@ use rusqlite::Connection;
 
 use crate::db;
 use crate::error::{AppErrorDto, CmdResult};
-use crate::models::{is_supported_summary_language, Summary};
-use crate::providers::qwen::{HttpQwenClient, SummaryGenerateInput, SummaryGenerator};
+use crate::models::{is_supported_summary_language, Settings, Summary};
+use crate::providers::openai_compat::{
+    HttpChatClient, LlmConfig, SummaryGenerateInput, SummaryGenerator,
+};
 use crate::services::{credentials, meeting_service, settings_service};
 
 fn encode_list(items: &[String]) -> CmdResult<String> {
@@ -96,6 +98,26 @@ fn require_transcript(conn: &Connection, meeting_id: &str) -> CmdResult<String> 
     }
 }
 
+/// Effective summary LLM config from settings + keyring. Empty base URL or
+/// model (e.g. an unknown provider id in SQLite) counts as not configured.
+fn require_llm_config(settings: &Settings) -> CmdResult<LlmConfig> {
+    let api_key = credentials::require_summary_llm_credentials()?.api_key;
+    if settings.summary_llm_base_url.trim().is_empty()
+        || settings.summary_llm_model.trim().is_empty()
+    {
+        return Err(AppErrorDto::new(
+            "SUMMARY_NOT_CONFIGURED",
+            "摘要模型服务未完整配置（Base URL / 模型），请先在设置中配置",
+        ));
+    }
+    Ok(LlmConfig {
+        provider: settings.summary_llm_provider.clone(),
+        base_url: settings.summary_llm_base_url.clone(),
+        model: settings.summary_llm_model.clone(),
+        api_key,
+    })
+}
+
 /// Generate (or regenerate) a summary for a meeting that already has a transcript.
 ///
 /// The DB lock is held only to read inputs and to write the result, never while
@@ -111,17 +133,17 @@ pub fn generate_summary(
             "Unsupported summary language; use zh-CN, en, or zh-en",
         ));
     }
-    let (transcript, context_text) = {
+    let (transcript, settings) = {
         let conn = db::lock(db)?;
         let _ = meeting_service::get_meeting(&conn, meeting_id)?;
         let transcript = require_transcript(&conn, meeting_id)?;
-        let settings = settings_service::get_settings(&conn)?;
-        (transcript, settings.context_text)
+        (transcript, settings_service::get_settings(&conn)?)
     };
-    let credentials = credentials::require_dashscope_credentials()?;
+    let config = require_llm_config(&settings)?;
+    let context_text = settings.context_text;
 
     let content = generator.generate(
-        &credentials,
+        &config,
         &SummaryGenerateInput {
             transcript,
             context_text,
@@ -145,13 +167,13 @@ pub fn generate_summary(
     Ok(summary)
 }
 
-/// Production entry: real HTTP Qwen client.
+/// Production entry: real OpenAI-compatible HTTP client.
 pub fn generate_summary_http(
     db: &Mutex<Connection>,
     meeting_id: &str,
     language: &str,
 ) -> CmdResult<Summary> {
-    let client = HttpQwenClient::new()?;
+    let client = HttpChatClient::new()?;
     generate_summary(db, meeting_id, language, &client)
 }
 
@@ -160,9 +182,8 @@ mod tests {
     use super::*;
     use crate::db::pool::open_memory;
     use crate::models::{SettingsUpdate, SummaryContent};
-    use crate::providers::qwen::SummaryGenerateInput;
     use crate::services::credentials::{
-        reset_for_test, set_credentials, set_dashscope_credentials,
+        reset_for_test, set_credentials, set_summary_llm_credentials,
     };
     use crate::services::meeting_service::{create_from_file, upsert_transcript};
     use crate::services::settings_service::update_settings;
@@ -173,15 +194,27 @@ mod tests {
     struct StubGenerator {
         result: Mutex<Result<SummaryContent, AppErrorDto>>,
         last_context: Mutex<Option<String>>,
+        last_config: Mutex<Option<LlmConfig>>,
+    }
+
+    impl StubGenerator {
+        fn ok(content: SummaryContent) -> Self {
+            Self {
+                result: Mutex::new(Ok(content)),
+                last_context: Mutex::new(None),
+                last_config: Mutex::new(None),
+            }
+        }
     }
 
     impl SummaryGenerator for StubGenerator {
         fn generate(
             &self,
-            _credentials: &credentials::DashScopeCredentials,
+            config: &LlmConfig,
             input: &SummaryGenerateInput,
         ) -> CmdResult<SummaryContent> {
             *self.last_context.lock().unwrap() = Some(input.context_text.clone());
+            *self.last_config.lock().unwrap() = Some(config.clone());
             match &*self.result.lock().unwrap() {
                 Ok(out) => Ok(out.clone()),
                 Err(err) => Err(err.clone()),
@@ -208,18 +241,15 @@ mod tests {
     #[test]
     fn generate_with_empty_context_works() {
         reset_for_test();
-        set_dashscope_credentials("sk-test").unwrap();
+        set_summary_llm_credentials("sk-test").unwrap();
         let db = Mutex::new(open_memory().unwrap());
         let (meeting_id, path) = seed_meeting_with_transcript(&db.lock().unwrap());
 
-        let stub = StubGenerator {
-            result: Mutex::new(Ok(SummaryContent {
-                key_points: vec!["发布计划".into()],
-                action_items: vec![],
-                decisions: vec!["下周上线".into()],
-            })),
-            last_context: Mutex::new(None),
-        };
+        let stub = StubGenerator::ok(SummaryContent {
+            key_points: vec!["发布计划".into()],
+            action_items: vec![],
+            decisions: vec!["下周上线".into()],
+        });
 
         let summary = generate_summary(&db, &meeting_id, "zh-CN", &stub).unwrap();
         assert_eq!(summary.language, "zh-CN");
@@ -235,7 +265,7 @@ mod tests {
     #[test]
     fn generate_includes_context_text() {
         reset_for_test();
-        set_dashscope_credentials("sk-test").unwrap();
+        set_summary_llm_credentials("sk-test").unwrap();
         let db = Mutex::new(open_memory().unwrap());
         let (meeting_id, path) = seed_meeting_with_transcript(&db.lock().unwrap());
         update_settings(
@@ -247,10 +277,7 @@ mod tests {
         )
         .unwrap();
 
-        let stub = StubGenerator {
-            result: Mutex::new(Ok(SummaryContent::default())),
-            last_context: Mutex::new(None),
-        };
+        let stub = StubGenerator::ok(SummaryContent::default());
         generate_summary(&db, &meeting_id, "zh-CN", &stub).unwrap();
         assert_eq!(
             stub.last_context.lock().unwrap().as_deref(),
@@ -262,31 +289,78 @@ mod tests {
     #[test]
     fn not_ready_without_transcript() {
         reset_for_test();
-        set_dashscope_credentials("sk-test").unwrap();
+        set_summary_llm_credentials("sk-test").unwrap();
         let db = Mutex::new(open_memory().unwrap());
         set_credentials("doubao-key").unwrap();
         let (path, path_str) = temp_audio();
         let meeting = create_from_file(&db.lock().unwrap(), &path_str).unwrap();
 
-        let stub = StubGenerator {
-            result: Mutex::new(Ok(SummaryContent::default())),
-            last_context: Mutex::new(None),
-        };
+        let stub = StubGenerator::ok(SummaryContent::default());
         let err = generate_summary(&db, &meeting.id, "zh-CN", &stub).expect_err("not ready");
         assert_eq!(err.code, "SUMMARY_NOT_READY");
         let _ = std::fs::remove_file(path);
     }
 
     #[test]
-    fn not_configured_without_dashscope_key() {
+    fn upgraded_install_uses_dashscope_defaults() {
+        // AC1: legacy DashScope key + untouched settings → DashScope + qwen3.7-plus.
+        reset_for_test();
+        credentials::seed_legacy_dashscope_key_for_test("sk-legacy");
+        credentials::migrate_legacy_credentials();
+        let db = Mutex::new(open_memory().unwrap());
+        let (meeting_id, path) = seed_meeting_with_transcript(&db.lock().unwrap());
+
+        let stub = StubGenerator::ok(SummaryContent::default());
+        generate_summary(&db, &meeting_id, "zh-CN", &stub).unwrap();
+        let config = stub.last_config.lock().unwrap().clone().unwrap();
+        assert_eq!(config.provider, "dashscope");
+        assert_eq!(
+            config.chat_completions_url(),
+            "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+        );
+        assert_eq!(config.model, "qwen3.7-plus");
+        assert_eq!(config.api_key, "sk-legacy");
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn generate_uses_configured_provider() {
+        // AC2: DeepSeek + key + model from settings reach the generator.
+        reset_for_test();
+        let db = Mutex::new(open_memory().unwrap());
+        let (meeting_id, path) = seed_meeting_with_transcript(&db.lock().unwrap());
+        update_settings(
+            &db.lock().unwrap(),
+            SettingsUpdate {
+                summary_llm_provider: Some("deepseek".into()),
+                summary_llm_base_url: Some("https://api.deepseek.com/v1/".into()),
+                summary_llm_model: Some("deepseek-reasoner".into()),
+                summary_llm_api_key: Some("sk-deepseek".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        let stub = StubGenerator::ok(SummaryContent::default());
+        generate_summary(&db, &meeting_id, "zh-CN", &stub).unwrap();
+        let config = stub.last_config.lock().unwrap().clone().unwrap();
+        assert_eq!(config.provider, "deepseek");
+        assert_eq!(
+            config.chat_completions_url(),
+            "https://api.deepseek.com/v1/chat/completions"
+        );
+        assert_eq!(config.model, "deepseek-reasoner");
+        assert_eq!(config.api_key, "sk-deepseek");
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn not_configured_without_summary_llm_key() {
         reset_for_test();
         let db = Mutex::new(open_memory().unwrap());
         let (meeting_id, path) = seed_meeting_with_transcript(&db.lock().unwrap());
 
-        let stub = StubGenerator {
-            result: Mutex::new(Ok(SummaryContent::default())),
-            last_context: Mutex::new(None),
-        };
+        let stub = StubGenerator::ok(SummaryContent::default());
         let err = generate_summary(&db, &meeting_id, "zh-CN", &stub).expect_err("no key");
         assert_eq!(err.code, "SUMMARY_NOT_CONFIGURED");
         let _ = std::fs::remove_file(path);
@@ -295,7 +369,7 @@ mod tests {
     #[test]
     fn parse_failure_from_provider() {
         reset_for_test();
-        set_dashscope_credentials("sk-test").unwrap();
+        set_summary_llm_credentials("sk-test").unwrap();
         let db = Mutex::new(open_memory().unwrap());
         let (meeting_id, path) = seed_meeting_with_transcript(&db.lock().unwrap());
 
@@ -304,6 +378,7 @@ mod tests {
                 "Invalid summary JSON from provider",
             ))),
             last_context: Mutex::new(None),
+            last_config: Mutex::new(None),
         };
         let err = generate_summary(&db, &meeting_id, "zh-CN", &stub).expect_err("parse");
         assert_eq!(err.code, "SUMMARY_PROVIDER_ERROR");
@@ -320,7 +395,7 @@ mod tests {
     impl SummaryGenerator for LockProbeGenerator<'_> {
         fn generate(
             &self,
-            _credentials: &credentials::DashScopeCredentials,
+            _config: &LlmConfig,
             _input: &SummaryGenerateInput,
         ) -> CmdResult<SummaryContent> {
             assert!(
@@ -334,7 +409,7 @@ mod tests {
     #[test]
     fn db_lock_released_during_generation() {
         reset_for_test();
-        set_dashscope_credentials("sk-test").unwrap();
+        set_summary_llm_credentials("sk-test").unwrap();
         let db = Mutex::new(open_memory().unwrap());
         let (meeting_id, path) = seed_meeting_with_transcript(&db.lock().unwrap());
 
@@ -353,7 +428,7 @@ mod tests {
     impl SummaryGenerator for DeletingGenerator<'_> {
         fn generate(
             &self,
-            _credentials: &credentials::DashScopeCredentials,
+            _config: &LlmConfig,
             _input: &SummaryGenerateInput,
         ) -> CmdResult<SummaryContent> {
             meeting_service::delete_meeting(&self.db.lock().unwrap(), &self.meeting_id)?;
@@ -364,7 +439,7 @@ mod tests {
     #[test]
     fn meeting_deleted_during_generation_writes_nothing() {
         reset_for_test();
-        set_dashscope_credentials("sk-test").unwrap();
+        set_summary_llm_credentials("sk-test").unwrap();
         let db = Mutex::new(open_memory().unwrap());
         let (meeting_id, path) = seed_meeting_with_transcript(&db.lock().unwrap());
 

@@ -58,8 +58,8 @@ Helpers: `settings_invalid`, `invalid_argument`, `db_error`, `internal`, `not_fo
 | Doubao API failure (submit / query / test probe) | `ASR_PROVIDER_ERROR` | Job error |
 | Async poll > 45 minutes | `ASR_TIMEOUT` | Job error |
 | Transcript not ready for summary | `SUMMARY_NOT_READY` | Inline / prompt to finish ASR |
-| Missing DashScope key | `SUMMARY_NOT_CONFIGURED` | Prompt to settings |
-| Qwen API / invalid JSON | `SUMMARY_PROVIDER_ERROR` | Inline |
+| Missing summary LLM key | `SUMMARY_NOT_CONFIGURED` | Prompt to settings |
+| Summary LLM API / invalid JSON | `SUMMARY_PROVIDER_ERROR` | Inline + link to settings; message names provider label, never the key |
 | No speaker segments to rename | `TRANSCRIPT_NO_SPEAKERS` | Inline |
 | No audio input device | `RECORD_NO_DEVICE` | Inline |
 | Recording already active | `RECORD_BUSY` | Inline |

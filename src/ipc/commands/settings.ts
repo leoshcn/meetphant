@@ -1,9 +1,9 @@
 import { invokeCommand } from "../client";
 import type {
   Settings,
-  SettingsTestDashscopeOverrides,
   SettingsTestDoubaoOverrides,
   SettingsTestResult,
+  SettingsTestSummaryLlmOverrides,
   SettingsTestTosOverrides,
   SettingsUpdate,
 } from "../types";
@@ -20,8 +20,8 @@ export function settingsClearDoubaoCredentials(): Promise<Settings> {
   return invokeCommand<Settings>("settings_clear_doubao_credentials");
 }
 
-export function settingsClearDashscopeCredentials(): Promise<Settings> {
-  return invokeCommand<Settings>("settings_clear_dashscope_credentials");
+export function settingsClearSummaryLlmCredentials(): Promise<Settings> {
+  return invokeCommand<Settings>("settings_clear_summary_llm_credentials");
 }
 
 export function settingsClearTosCredentials(): Promise<Settings> {
@@ -48,10 +48,13 @@ export function settingsTestTos(
   });
 }
 
-export function settingsTestDashscope(
-  overrides: SettingsTestDashscopeOverrides = {},
+export function settingsTestSummaryLlm(
+  overrides: SettingsTestSummaryLlmOverrides = {},
 ): Promise<SettingsTestResult> {
-  return invokeCommand<SettingsTestResult>("settings_test_dashscope", {
-    dashscope_api_key: overrides.dashscope_api_key,
+  return invokeCommand<SettingsTestResult>("settings_test_summary_llm", {
+    api_key: overrides.api_key,
+    provider: overrides.provider,
+    base_url: overrides.base_url,
+    model: overrides.model,
   });
 }

@@ -39,14 +39,19 @@ src-tauri/src/
 │   │   └── hotwords.rs
 │   ├── tos/
 │   │   └── mod.rs
-│   └── qwen/
+│   └── openai_compat/
+│       ├── mod.rs
+│       ├── client.rs      # LlmConfig, prompts, HttpChatClient (generate + test_connection)
+│       └── presets.rs     # provider presets (single source of truth)
 ├── db/
 │   ├── pool.rs
 │   └── migrations/
 │       ├── 001_settings.sql
 │       ├── 002_meetings_jobs.sql
 │       ├── 003_summaries.sql
-│       └── 004_tos_settings.sql
+│       ├── 004_tos_settings.sql
+│       ├── …
+│       └── 008_summary_llm.sql
 └── models/
     ├── settings.rs
     ├── meeting.rs
@@ -60,7 +65,7 @@ src-tauri/src/
 
 - **commands/** — IPC edge only.
 - **services/** — validation + persistence + job orchestration (incl. TOS upload + Seed-ASR 2.0).
-- **providers/** — Doubao Seed-ASR 2.0 (submit/query + X-Api-Key auth), TOS object storage, Qwen; no SQLite.
+- **providers/** — Doubao Seed-ASR 2.0 (submit/query + X-Api-Key auth), TOS object storage, OpenAI-compatible summary LLM (DashScope / DeepSeek / OpenAI / Moonshot / Zhipu / Ark / custom); no SQLite.
 - **db/** — migrations + connection.
 - **models/** — serde DTOs shared across IPC.
 
@@ -70,4 +75,4 @@ src-tauri/src/
 
 - Doubao / TOS HTTP or SDK calls inside command handlers (keep under `providers/`).
 - Returning unstructured `String` errors from commands.
-- Storing Doubao, DashScope, or TOS secrets in SQLite.
+- Storing Doubao, summary LLM, or TOS secrets in SQLite.

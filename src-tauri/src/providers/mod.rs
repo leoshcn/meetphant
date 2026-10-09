@@ -1,3 +1,3 @@
 pub mod doubao;
-pub mod qwen;
+pub mod openai_compat;
 pub mod tos;

@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { __setInvokeForTests } from "../client";
 import {
-  settingsClearDashscopeCredentials,
   settingsClearDoubaoCredentials,
+  settingsClearSummaryLlmCredentials,
   settingsClearTosCredentials,
   settingsGet,
-  settingsTestDashscope,
   settingsTestDoubao,
+  settingsTestSummaryLlm,
   settingsTestTos,
   settingsUpdate,
 } from "./settings";
@@ -15,7 +15,10 @@ const emptySettings = {
   hotwords: [] as string[],
   context_text: "",
   doubao_configured: false,
-  dashscope_configured: false,
+  summary_llm_configured: false,
+  summary_llm_provider: "dashscope",
+  summary_llm_base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  summary_llm_model: "qwen3.7-plus",
   tos_configured: false,
   tos_region: "",
   tos_bucket: "",
@@ -41,7 +44,9 @@ describe("settings commands", () => {
     expect(invoke).toHaveBeenCalledWith("settings_get", undefined);
     expect(result.hotwords).toEqual(["Meetphant"]);
     expect(result.doubao_configured).toBe(false);
-    expect(result.dashscope_configured).toBe(false);
+    expect(result.summary_llm_configured).toBe(false);
+    expect(result.summary_llm_provider).toBe("dashscope");
+    expect(JSON.stringify(result)).not.toContain("api_key");
     expect(result.tos_configured).toBe(false);
   });
 
@@ -51,7 +56,7 @@ describe("settings commands", () => {
       hotwords: ["Meetphant"],
       context_text: "ctx",
       doubao_configured: true,
-      dashscope_configured: true,
+      summary_llm_configured: true,
       tos_configured: true,
       tos_region: "cn-beijing",
       tos_bucket: "meetphant",
@@ -62,7 +67,10 @@ describe("settings commands", () => {
       hotwords: ["Meetphant"],
       context_text: "ctx",
       doubao_api_key: "doubao-key",
-      dashscope_api_key: "sk-test",
+      summary_llm_api_key: "sk-test",
+      summary_llm_provider: "deepseek",
+      summary_llm_base_url: "https://api.deepseek.com/v1",
+      summary_llm_model: "deepseek-chat",
       tos_access_key_id: "ak",
       tos_secret_access_key: "sk",
       tos_region: "cn-beijing",
@@ -73,7 +81,10 @@ describe("settings commands", () => {
         hotwords: ["Meetphant"],
         context_text: "ctx",
         doubao_api_key: "doubao-key",
-        dashscope_api_key: "sk-test",
+        summary_llm_api_key: "sk-test",
+        summary_llm_provider: "deepseek",
+        summary_llm_base_url: "https://api.deepseek.com/v1",
+        summary_llm_model: "deepseek-chat",
         tos_access_key_id: "ak",
         tos_secret_access_key: "sk",
         tos_region: "cn-beijing",
@@ -92,12 +103,12 @@ describe("settings commands", () => {
     );
   });
 
-  it("settingsClearDashscopeCredentials invokes clear command", async () => {
+  it("settingsClearSummaryLlmCredentials invokes clear command", async () => {
     const invoke = vi.fn().mockResolvedValue(emptySettings);
     __setInvokeForTests(invoke);
-    await settingsClearDashscopeCredentials();
+    await settingsClearSummaryLlmCredentials();
     expect(invoke).toHaveBeenCalledWith(
-      "settings_clear_dashscope_credentials",
+      "settings_clear_summary_llm_credentials",
       undefined,
     );
   });
@@ -147,12 +158,32 @@ describe("settings commands", () => {
     });
   });
 
-  it("settingsTestDashscope passes optional override", async () => {
+  it("settingsTestSummaryLlm passes optional overrides", async () => {
     const invoke = vi.fn().mockResolvedValue({ ok: true });
     __setInvokeForTests(invoke);
-    await settingsTestDashscope({ dashscope_api_key: "sk-x" });
-    expect(invoke).toHaveBeenCalledWith("settings_test_dashscope", {
-      dashscope_api_key: "sk-x",
+    await settingsTestSummaryLlm({
+      api_key: "sk-x",
+      provider: "custom",
+      base_url: "http://localhost:11434/v1",
+      model: "llama3",
+    });
+    expect(invoke).toHaveBeenCalledWith("settings_test_summary_llm", {
+      api_key: "sk-x",
+      provider: "custom",
+      base_url: "http://localhost:11434/v1",
+      model: "llama3",
+    });
+  });
+
+  it("settingsTestSummaryLlm allows empty overrides", async () => {
+    const invoke = vi.fn().mockResolvedValue({ ok: true });
+    __setInvokeForTests(invoke);
+    await settingsTestSummaryLlm();
+    expect(invoke).toHaveBeenCalledWith("settings_test_summary_llm", {
+      api_key: undefined,
+      provider: undefined,
+      base_url: undefined,
+      model: undefined,
     });
   });
 });

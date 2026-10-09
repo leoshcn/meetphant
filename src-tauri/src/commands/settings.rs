@@ -24,11 +24,9 @@ pub fn settings_clear_doubao_credentials(state: State<'_, AppState>) -> CmdResul
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub fn settings_clear_dashscope_credentials(state: State<'_, AppState>) -> CmdResult<Settings> {
-    crate::db::with(&state.db, |conn| {
-        services::clear_dashscope_credentials(conn)
-    })
-    .log_cmd("settings_clear_dashscope_credentials")
+pub fn settings_clear_summary_llm_credentials(state: State<'_, AppState>) -> CmdResult<Settings> {
+    crate::db::with(&state.db, services::clear_summary_llm_credentials)
+        .log_cmd("settings_clear_summary_llm_credentials")
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -70,12 +68,28 @@ pub async fn settings_test_tos(
     .log_cmd("settings_test_tos")
 }
 
-/// Probe DashScope via GET /models. Optional override merges with keyring; never persists.
+/// Probe the summary LLM with a minimal chat completion using the configured model.
+/// Optional overrides merge with keyring/SQLite; never persists.
 #[tauri::command(rename_all = "snake_case")]
-pub async fn settings_test_dashscope(
-    dashscope_api_key: Option<String>,
+pub async fn settings_test_summary_llm(
+    app: AppHandle,
+    api_key: Option<String>,
+    provider: Option<String>,
+    base_url: Option<String>,
+    model: Option<String>,
 ) -> CmdResult<SettingsTestResult> {
-    run_blocking(move || services::test_dashscope(dashscope_api_key.as_deref()))
-        .await
-        .log_cmd("settings_test_dashscope")
+    run_blocking(move || {
+        let state = app.state::<AppState>();
+        services::test_summary_llm(
+            &state.db,
+            services::SummaryLlmTestOverrides {
+                api_key: api_key.as_deref(),
+                provider: provider.as_deref(),
+                base_url: base_url.as_deref(),
+                model: model.as_deref(),
+            },
+        )
+    })
+    .await
+    .log_cmd("settings_test_summary_llm")
 }

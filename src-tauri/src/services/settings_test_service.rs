@@ -8,10 +8,11 @@ use serde::Serialize;
 use crate::db;
 use crate::error::{AppErrorDto, CmdResult};
 use crate::providers::doubao::HttpAsyncClient;
-use crate::providers::qwen::client::HttpQwenClient;
+use crate::providers::openai_compat::presets;
+use crate::providers::openai_compat::{HttpChatClient, LlmConfig};
 use crate::providers::tos::{HttpTosClient, TosConfig};
-use crate::services::credentials::{self, DashScopeCredentials, DoubaoCredentials, TosCredentials};
-use crate::services::settings_service;
+use crate::services::credentials::{self, DoubaoCredentials, TosCredentials};
+use crate::services::settings_service::{self, EffectiveSummaryLlm};
 
 /// IPC success payload for `settings_test_*`.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -48,19 +49,72 @@ pub fn merge_doubao_credentials(doubao_api_key: Option<&str>) -> CmdResult<Douba
         .ok_or_else(AppErrorDto::asr_not_configured)
 }
 
-/// Merge DashScope override with keyring. Does not write.
-pub fn merge_dashscope_credentials(
-    dashscope_api_key: Option<&str>,
-) -> CmdResult<DashScopeCredentials> {
-    let saved = credentials::get_dashscope_credentials()?;
-    let api_key = merge_secret_field(
-        dashscope_api_key,
-        saved.as_ref().map(|c| c.api_key.as_str()),
-    );
-    match api_key {
-        Some(api_key) => Ok(DashScopeCredentials { api_key }),
-        None => Err(AppErrorDto::summary_not_configured()),
-    }
+/// Form overrides for the summary LLM connection test; empty/omitted → saved value.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SummaryLlmTestOverrides<'a> {
+    pub api_key: Option<&'a str>,
+    pub provider: Option<&'a str>,
+    pub base_url: Option<&'a str>,
+    pub model: Option<&'a str>,
+}
+
+/// Merge summary LLM overrides with SQLite + keyring into a request config. Does not write.
+///
+/// When the merged provider or base URL differs from the saved one, the saved
+/// key is never reused (D5): an API key override is required.
+pub fn merge_summary_llm_config(
+    conn: &Connection,
+    overrides: SummaryLlmTestOverrides<'_>,
+) -> CmdResult<LlmConfig> {
+    let settings = settings_service::get_settings(conn)?;
+    let saved = EffectiveSummaryLlm::from_settings(&settings);
+
+    let provider = match merge_secret_field(overrides.provider, None) {
+        Some(raw) => settings_service::validate_summary_llm_provider(&raw)?.to_string(),
+        None => saved.provider.clone(),
+    };
+    let provider_changed = provider != saved.provider;
+    let preset = presets::resolve_preset(&provider);
+
+    let base_url = match merge_secret_field(overrides.base_url, None) {
+        Some(url) => url,
+        None if provider_changed => preset.default_base_url.to_string(),
+        None => saved.base_url.clone(),
+    };
+    let model = match merge_secret_field(overrides.model, None) {
+        Some(model) => model,
+        None if provider_changed => preset.default_model.unwrap_or_default().to_string(),
+        None => saved.model.clone(),
+    };
+    settings_service::validate_summary_llm_base_url(&base_url)?;
+    settings_service::validate_summary_llm_model(&model)?;
+
+    let next = EffectiveSummaryLlm {
+        provider,
+        base_url,
+        model,
+    };
+    let api_key = match merge_secret_field(overrides.api_key, None) {
+        Some(key) => key,
+        None if settings_service::summary_llm_endpoint_changed(&saved, &next) => {
+            return Err(AppErrorDto::with_details(
+                "SETTINGS_INVALID",
+                "切换服务商或修改 Base URL 后需重新填写 API Key",
+                serde_json::json!({ "field": "summary_llm_api_key" }),
+            ));
+        }
+        None => credentials::get_summary_llm_credentials()?
+            .map(|c| c.api_key)
+            .filter(|k| !k.trim().is_empty())
+            .ok_or_else(AppErrorDto::summary_not_configured)?,
+    };
+
+    Ok(LlmConfig {
+        provider: next.provider,
+        base_url: next.base_url,
+        model: next.model,
+        api_key,
+    })
 }
 
 /// Merged TOS config for probes (secrets + non-secrets). Does not write.
@@ -149,10 +203,15 @@ pub fn test_tos(
     Ok(SettingsTestResult::ok())
 }
 
-pub fn test_dashscope(dashscope_api_key: Option<&str>) -> CmdResult<SettingsTestResult> {
-    let credentials = merge_dashscope_credentials(dashscope_api_key)?;
-    let client = HttpQwenClient::new()?;
-    client.list_models(&credentials)?;
+/// Minimal chat completion against the merged config. Holds the DB lock only
+/// while merging, not during the network call. Never persists overrides.
+pub fn test_summary_llm(
+    db: &Mutex<Connection>,
+    overrides: SummaryLlmTestOverrides<'_>,
+) -> CmdResult<SettingsTestResult> {
+    let config = merge_summary_llm_config(&*db::lock(db)?, overrides)?;
+    let client = HttpChatClient::for_probe()?;
+    client.test_connection(&config)?;
     Ok(SettingsTestResult::ok())
 }
 
@@ -201,17 +260,135 @@ mod tests {
     }
 
     #[test]
-    fn dashscope_not_configured() {
+    fn summary_llm_not_configured() {
         reset_for_test();
-        let err = merge_dashscope_credentials(None).expect_err("missing");
+        let conn = crate::db::pool::open_memory().expect("memory db");
+        let err = merge_summary_llm_config(&conn, SummaryLlmTestOverrides::default())
+            .expect_err("missing");
         assert_eq!(err.code, "SUMMARY_NOT_CONFIGURED");
     }
 
     #[test]
-    fn dashscope_override_without_saved() {
+    fn summary_llm_override_without_saved_uses_defaults() {
         reset_for_test();
-        let merged = merge_dashscope_credentials(Some("sk-form")).expect("merge");
+        let conn = crate::db::pool::open_memory().expect("memory db");
+        let merged = merge_summary_llm_config(
+            &conn,
+            SummaryLlmTestOverrides {
+                api_key: Some(" sk-form "),
+                ..Default::default()
+            },
+        )
+        .expect("merge");
         assert_eq!(merged.api_key, "sk-form");
+        assert_eq!(merged.provider, "dashscope");
+        assert_eq!(
+            merged.base_url,
+            "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        );
+        assert_eq!(merged.model, "qwen3.7-plus");
+    }
+
+    #[test]
+    fn summary_llm_saved_key_reused_for_same_endpoint() {
+        reset_for_test();
+        let conn = crate::db::pool::open_memory().expect("memory db");
+        credentials::set_summary_llm_credentials("sk-saved").unwrap();
+        let merged = merge_summary_llm_config(
+            &conn,
+            SummaryLlmTestOverrides {
+                model: Some("qwen-max"),
+                ..Default::default()
+            },
+        )
+        .expect("merge");
+        assert_eq!(merged.api_key, "sk-saved");
+        assert_eq!(merged.model, "qwen-max");
+    }
+
+    #[test]
+    fn summary_llm_saved_key_not_sent_to_new_endpoint() {
+        reset_for_test();
+        let conn = crate::db::pool::open_memory().expect("memory db");
+        credentials::set_summary_llm_credentials("sk-saved").unwrap();
+
+        let err = merge_summary_llm_config(
+            &conn,
+            SummaryLlmTestOverrides {
+                provider: Some("deepseek"),
+                ..Default::default()
+            },
+        )
+        .expect_err("provider change");
+        assert_eq!(err.code, "SETTINGS_INVALID");
+
+        let err = merge_summary_llm_config(
+            &conn,
+            SummaryLlmTestOverrides {
+                base_url: Some("https://evil.example.com/v1"),
+                ..Default::default()
+            },
+        )
+        .expect_err("base url change");
+        assert_eq!(err.code, "SETTINGS_INVALID");
+
+        let merged = merge_summary_llm_config(
+            &conn,
+            SummaryLlmTestOverrides {
+                provider: Some("deepseek"),
+                api_key: Some("sk-deepseek"),
+                ..Default::default()
+            },
+        )
+        .expect("with key");
+        assert_eq!(merged.base_url, "https://api.deepseek.com/v1");
+        assert_eq!(merged.model, "deepseek-chat");
+        assert_eq!(merged.api_key, "sk-deepseek");
+    }
+
+    #[test]
+    fn summary_llm_test_rejects_invalid_values_and_does_not_persist() {
+        reset_for_test();
+        let conn = crate::db::pool::open_memory().expect("memory db");
+        let err = merge_summary_llm_config(
+            &conn,
+            SummaryLlmTestOverrides {
+                api_key: Some("k"),
+                base_url: Some("ftp://x"),
+                ..Default::default()
+            },
+        )
+        .expect_err("ftp");
+        assert_eq!(err.code, "SETTINGS_INVALID");
+
+        let err = merge_summary_llm_config(
+            &conn,
+            SummaryLlmTestOverrides {
+                api_key: Some("k"),
+                provider: Some("openai"),
+                ..Default::default()
+            },
+        )
+        .expect_err("openai needs a model");
+        assert_eq!(err.code, "SETTINGS_INVALID");
+
+        merge_summary_llm_config(
+            &conn,
+            SummaryLlmTestOverrides {
+                api_key: Some("sk-form"),
+                provider: Some("custom"),
+                base_url: Some("http://localhost:11434/v1"),
+                model: Some("llama3"),
+            },
+        )
+        .expect("custom");
+
+        let settings = settings_service::get_settings(&conn).expect("get");
+        assert_eq!(settings.summary_llm_provider, "dashscope");
+        assert!(!settings.summary_llm_configured);
+        assert!(credentials::get_summary_llm_credentials()
+            .unwrap()
+            .is_none());
     }
 
     #[test]
