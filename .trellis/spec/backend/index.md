@@ -1,6 +1,6 @@
 # Backend Development Guidelines
 
-> Coding contracts for Meetly Tauri/Rust backend (`src-tauri`).
+> Coding contracts for Meetphant Tauri/Rust backend (`src-tauri`).
 
 ---
 

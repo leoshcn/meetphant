@@ -1,12 +1,12 @@
 # Directory Structure
 
-> How frontend code is organized in Meetly (Tauri + React + TypeScript).
+> How frontend code is organized in Meetphant (Tauri + React + TypeScript).
 
 ---
 
 ## Overview
 
-Meetly UI lives under `src/` (Vite + React). Feature folders own screens and feature-local components; shared UI and the typed IPC client stay outside features.
+Meetphant UI lives under `src/` (Vite + React). Feature folders own screens and feature-local components; shared UI and the typed IPC client stay outside features.
 
 ---
 

@@ -1,6 +1,6 @@
 # Error Handling
 
-> How errors cross the Tauri IPC boundary and surface in the Meetly UI.
+> How errors cross the Tauri IPC boundary and surface in the Meetphant UI.
 
 ---
 

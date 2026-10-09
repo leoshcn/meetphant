@@ -40,7 +40,7 @@ Singleton row `id = 1`:
 
 | `tos_endpoint` | TEXT NOT NULL DEFAULT `''` (optional; empty → SDK default) |
 
-| `recording_dir` | TEXT NOT NULL DEFAULT `''` (empty → Documents/Meetly/Recordings) |
+| `recording_dir` | TEXT NOT NULL DEFAULT `''` (empty → Documents/Meetphant/Recordings) |
 
 | `theme_preference` | TEXT NOT NULL DEFAULT `'system'` (`system` \| `light` \| `dark`) |
 

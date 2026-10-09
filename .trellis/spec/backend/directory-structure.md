@@ -1,6 +1,6 @@
 # Directory Structure
 
-> How Rust / Tauri backend code is organized in Meetly.
+> How Rust / Tauri backend code is organized in Meetphant.
 
 ---
 

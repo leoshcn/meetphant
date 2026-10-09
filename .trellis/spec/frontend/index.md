@@ -1,6 +1,6 @@
 # Frontend Development Guidelines
 
-> Coding contracts for Meetly React/TypeScript UI (`src/`).
+> Coding contracts for Meetphant React/TypeScript UI (`src/`).
 
 ---
 

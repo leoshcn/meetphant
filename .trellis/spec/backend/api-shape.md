@@ -63,7 +63,7 @@ Tauri 2 runs sync `#[tauri::command]` fns on the **main thread**.
 | Event | Direction | Payload | Source |
 |-------|-----------|---------|--------|
 | `recording:close-requested` | Rust → `main` | none | `src-tauri/src/lib.rs` `on_window_event` when main close is blocked while recording |
-| `recording:focus-request` | tray / `recorder-widget` → `main` | none | tray left-click/menu「打开 Meetly」or widget「打开 Meetly」; AppShell sets `screen=home` |
+| `recording:focus-request` | tray / `recorder-widget` → `main` | none | tray left-click/menu「打开 Meetphant」or widget「打开 Meetphant」; AppShell sets `screen=home` |
 
 ### Envelope
 
@@ -91,7 +91,7 @@ type Settings = {
   tos_bucket: string;
   /** Optional custom endpoint; empty → default `https://tos-{region}.volces.com`. */
   tos_endpoint: string;
-  /** User override; empty → default Documents/Meetly/Recordings. */
+  /** User override; empty → default Documents/Meetphant/Recordings. */
   recording_dir: string;
   /** Effective path after resolving empty default. */
   recording_dir_resolved: string;
@@ -200,7 +200,7 @@ type Summary = {
 |-------|------|
 | OS keyring (`meetphant` / `doubao_api_key`) | Write via settings; read only inside provider. Old-console `doubao_app_id` / `doubao_access_token` are unsupported and deleted on startup |
 | OS keyring (`meetphant` / `summary_llm_api_key`) | Write via settings; read by summary service / test merge only. On startup, if empty, copied from `dashscope_api_key` (`meetphant`, then legacy `meetly`); the old entry is **kept** for rollback. `settings_clear_summary_llm_credentials` also deletes the old `dashscope_api_key` entries so a cleared key is not re-migrated |
-| OS keyring (`meetly` / `tos_access_key_id`, `tos_secret_access_key`) | Write via settings; read only inside TOS provider |
+| OS keyring (`meetphant` / `tos_access_key_id`, `tos_secret_access_key`) | Write via settings; read only inside TOS provider. Migrated once from the legacy `meetly` service |
 | SQLite `settings` | Never stores Doubao, summary LLM, or TOS secrets; may store `tos_region` / `tos_bucket` / `tos_endpoint` and `summary_llm_provider` / `summary_llm_base_url` / `summary_llm_model` |
 
 ### Summary LLM providers
