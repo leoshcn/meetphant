@@ -412,3 +412,24 @@ CTO review of the codebase, then iteration 1. #1: CI gate on push/PR (windows-la
 ### Status
 
 [OK] **Completed**
+
+
+## Session 14: Visual design refinement
+
+**Date**: 2026-10-09
+**Task**: Visual design refinement
+**Branch**: `main`
+
+### Summary
+
+Refined app visual design for a cleaner, more polished feel: new token system (surfaces, borders, shadows, radii), system UI font, unified form controls and focus ring, button/dialog elevation, header icon, sidebar SVG icons and overlay row actions, segmented settings tabs, recording badge. Typecheck/tests/build pass; not visually verified (no browser available).
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f969d83` | (see git log) |
+
+### Status
+
+[OK] **Completed**

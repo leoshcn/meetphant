@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 13
+- **Total Sessions**: 14
 - **Last Active**: 2026-10-09
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~414 | Active |
+| `journal-1.md` | ~435 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 14 | 2026-10-09 | Visual design refinement | `f969d83` | `main` |
 | 13 | 2026-10-09 | 摘要 LLM 可配置 + Meetphant 视觉标识 | `2e54600`, `a03c6e8`, `66e84c7` | `main` |
 | 12 | 2026-10-09 | Refactor iteration 1: CI, async commands, tracing | `85db523`, `17e3448`, `cf9eb47` | `main` |
 | 11 | 2026-10-09 | Doubao ASR: API Key auth + Seed-ASR 2.0 | `da01593`, `a2c7bbd` | `main` |
