@@ -162,14 +162,3 @@ mod tests {
         assert!(!err.message.contains('/') && !err.message.contains('\\'));
     }
 }
-
-#[cfg(test)]
-mod ci_red_probe {
-    #[test]
-    fn ci_must_fail_on_this() {
-        assert_eq!(
-            1, 2,
-            "deliberate failure to prove CI turns red; reverted next commit"
-        );
-    }
-}
