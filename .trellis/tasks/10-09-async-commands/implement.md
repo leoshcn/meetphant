@@ -31,3 +31,15 @@ npm run typecheck && npm test
 
 - 风险最高的是 `summary_service.rs` 的签名改动，回滚时还原这个文件和 `commands/summary.rs` 即可
 - `record_stop` 改成 async 后，`lib.rs` 里的 CloseRequested 处理只调用 `status()`，不受影响；`AppShell` 的关闭流程也只 await 这个结果，同样不受影响
+
+## Result（2026-10-09）
+
+- 第 1–10 步 DONE
+  - `commands/mod.rs::run_blocking`、`db::lock`
+  - `generate_summary` 改为接收 `&Mutex<Connection>`，按三段拆锁，写回前再检查会议是否存在
+  - `test_tos` 只在合并配置时持锁
+  - 改成 async 的 9 条命令：`summary_generate`、`settings_test_doubao/tos/dashscope`、`record_start/stop/list_input_devices`、`meetings_create_from_file/attach_source`、`jobs_start_transcription`
+- 第 10 步排查：所有网络调用点（`generate_summary_http`、`test_*`、转写线程）都不在持锁作用域内
+- 新增测试 `db_lock_released_during_generation`、`meeting_deleted_during_generation_writes_nothing`
+- 本地验证：fmt ✓、clippy ✓、cargo test 92/92 ✓、typecheck ✓、vitest 50/50 ✓
+- 手动验证 DONE（用户确认，2026-10-09）：摘要生成期间切换会议、打开设置页；长录音停止时窗口能否拖动；TOS 探测失败等待期间窗口不出现"未响应"

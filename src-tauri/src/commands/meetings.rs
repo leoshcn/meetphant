@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 
+use super::run_blocking;
 use crate::error::CmdResult;
 use crate::models::{Meeting, Transcript};
 use crate::services::meeting_service;
@@ -18,25 +19,27 @@ pub fn meetings_create(state: State<'_, AppState>) -> CmdResult<Meeting> {
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub fn meetings_create_from_file(state: State<'_, AppState>, path: String) -> CmdResult<Meeting> {
-    let conn = state
-        .db
-        .lock()
-        .map_err(|_| crate::error::AppErrorDto::internal("Database lock poisoned"))?;
-    meeting_service::create_from_file(&conn, &path)
+pub async fn meetings_create_from_file(app: AppHandle, path: String) -> CmdResult<Meeting> {
+    run_blocking(move || {
+        let state = app.state::<AppState>();
+        let conn = crate::db::lock(&state.db)?;
+        meeting_service::create_from_file(&conn, &path)
+    })
+    .await
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub fn meetings_attach_source(
-    state: State<'_, AppState>,
+pub async fn meetings_attach_source(
+    app: AppHandle,
     meeting_id: String,
     path: String,
 ) -> CmdResult<Meeting> {
-    let conn = state
-        .db
-        .lock()
-        .map_err(|_| crate::error::AppErrorDto::internal("Database lock poisoned"))?;
-    meeting_service::attach_source(&conn, &meeting_id, &path)
+    run_blocking(move || {
+        let state = app.state::<AppState>();
+        let conn = crate::db::lock(&state.db)?;
+        meeting_service::attach_source(&conn, &meeting_id, &path)
+    })
+    .await
 }
 
 #[tauri::command(rename_all = "snake_case")]

@@ -1,5 +1,6 @@
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 
+use super::run_blocking;
 use crate::error::CmdResult;
 use crate::models::{Settings, SettingsUpdate};
 use crate::services::{self, SettingsTestResult};
@@ -52,36 +53,38 @@ pub fn settings_clear_tos_credentials(state: State<'_, AppState>) -> CmdResult<S
 
 /// Probe Doubao credentials. Optional overrides merge with keyring; never persists.
 #[tauri::command(rename_all = "snake_case")]
-pub fn settings_test_doubao(doubao_api_key: Option<String>) -> CmdResult<SettingsTestResult> {
-    services::test_doubao(doubao_api_key.as_deref())
+pub async fn settings_test_doubao(doubao_api_key: Option<String>) -> CmdResult<SettingsTestResult> {
+    run_blocking(move || services::test_doubao(doubao_api_key.as_deref())).await
 }
 
 /// Probe TOS via HeadBucket. Optional overrides merge with keyring/SQLite; never persists.
 #[tauri::command(rename_all = "snake_case")]
-pub fn settings_test_tos(
-    state: State<'_, AppState>,
+pub async fn settings_test_tos(
+    app: AppHandle,
     tos_access_key_id: Option<String>,
     tos_secret_access_key: Option<String>,
     tos_region: Option<String>,
     tos_bucket: Option<String>,
     tos_endpoint: Option<String>,
 ) -> CmdResult<SettingsTestResult> {
-    let conn = state
-        .db
-        .lock()
-        .map_err(|_| crate::error::AppErrorDto::internal("Database lock poisoned"))?;
-    services::test_tos(
-        &conn,
-        tos_access_key_id.as_deref(),
-        tos_secret_access_key.as_deref(),
-        tos_region.as_deref(),
-        tos_bucket.as_deref(),
-        tos_endpoint.as_deref(),
-    )
+    run_blocking(move || {
+        let state = app.state::<AppState>();
+        services::test_tos(
+            &state.db,
+            tos_access_key_id.as_deref(),
+            tos_secret_access_key.as_deref(),
+            tos_region.as_deref(),
+            tos_bucket.as_deref(),
+            tos_endpoint.as_deref(),
+        )
+    })
+    .await
 }
 
 /// Probe DashScope via GET /models. Optional override merges with keyring; never persists.
 #[tauri::command(rename_all = "snake_case")]
-pub fn settings_test_dashscope(dashscope_api_key: Option<String>) -> CmdResult<SettingsTestResult> {
-    services::test_dashscope(dashscope_api_key.as_deref())
+pub async fn settings_test_dashscope(
+    dashscope_api_key: Option<String>,
+) -> CmdResult<SettingsTestResult> {
+    run_blocking(move || services::test_dashscope(dashscope_api_key.as_deref())).await
 }
